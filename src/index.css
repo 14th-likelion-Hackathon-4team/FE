@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+@theme {
+  /* 테마 색상 */
+  --color-primary-lightest: #dee6fb;
+  --color-primary-light: #283480;
+  --color-primary: #4d73e4;
+  --color-primary-dark: #2f43c6;
+  --color-primary-darkest: #9dbbf3;
+
+  /* 추가 색상 */
+  --color-accent-yellow: #fffbd4;
+  --color-accent-cyan: #10e3dc;
+
+  --color-background: #dee6fb80;
+  --color-text-main: #000000;
+  --color-alert: #e90000;
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--color-background);
+    box-sizing: border-box;
+    width: 1280px;
+  }
+  button {
+    cursor: pointer;
+  }
+}
