@@ -45,18 +45,6 @@ git -v
 버전 번호가 나오면 설치된 것입니다.
 안 나오면 [https://git-scm.com](https://git-scm.com) 에서 설치하세요.
 
-### gitmoji 설치 (커밋 이모지 도구, 최초 1회)
-
-```bash
-npm i -g gitmoji-cli
-```
-
-설치 확인:
-
-```bash
-gitmoji -v
-```
-
 ---
 
 ## 2. 프로젝트 처음 세팅하기
@@ -240,7 +228,7 @@ git branch
 ## 6. 커밋하기 (gitmoji)
 
 > 이 프로젝트의 커밋은 **반드시 gitmoji를 사용**합니다.
-> 일반 `git commit -m` 대신 `gitmoji -c`를 실행하세요.
+> 일반 `git commit -m` 대신 `npx gitmoji -c`를 실행하세요.
 
 ### 1단계 — 코드 검사
 
@@ -280,7 +268,7 @@ git add src/pages/Mainpage/MainPage.jsx
 아래 명령어를 실행합니다.
 
 ```bash
-gitmoji -c
+npx gitmoji -c
 ```
 
 그러면 아래 순서로 입력창이 나타납니다.
@@ -439,7 +427,7 @@ git status
 git add .
 
 # gitmoji 커밋
-gitmoji -c
+npx gitmoji -c
 
 # 최초 push 및 upstream 설정
 git push -u origin 브랜치명
