@@ -25,4 +25,14 @@ dist-ssr
 
 # project setting
 .env
+.env.*
+!.env.example
 node_modules/
+
+# Local AI coding tools
+.codex/
+.agents/
+.cursor/
+.claude/
+AGENTS.md
+CLAUDE.md

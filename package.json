@@ -1,5 +1,5 @@
 {
-  "name": "minipj_5team",
+  "name": "likelion-14th-hackathon-4team",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,8 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
-    "format": "prettier --write src"
+    "lint:fix": "eslint src --fix"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",

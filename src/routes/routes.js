@@ -4,8 +4,7 @@ export const lazyRoutes = {
   MainPage: lazy(() => import('../pages/Mainpage/MainPage')),
   LoginPage: lazy(() => import('../pages/LoginPage/LoginPage')),
   SignupPage: lazy(() => import('../pages/SignupPage/SignupPage')),
-  SurveyPage: lazy(() => import('../pages/SurveyPage/SurveyPage')),
-  MatchPage: lazy(() => import('../pages/MatchPage/MatchPage')),
+  RoutinePage: lazy(() => import('../pages/RoutinePage/RoutinePage')),
+  ReportPage: lazy(() => import('../pages/ReportPage/ReportPage')),
   MyPage: lazy(() => import('../pages/Mypage/Mypage')),
-  ProfilePage: lazy(() => import('../pages/ProfilePage/ProfilePage')),
 };
