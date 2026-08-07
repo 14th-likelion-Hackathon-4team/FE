@@ -5,9 +5,9 @@ const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
 const yearOptions = Array.from({ length: 16 }, (_, index) => 2020 + index);
 
 const statusClassNames = {
-  completed: 'border-primary bg-primary',
-  alternative: 'border-primary-soft bg-primary-soft',
-  incomplete: 'border-disabled bg-disabled',
+  completed: { background: 'bg-primary', border: 'border-primary' },
+  alternative: { background: 'bg-primary-soft', border: 'border-primary-soft' },
+  incomplete: { background: 'bg-disabled', border: 'border-disabled' },
 };
 
 const toDateId = (date) => {
@@ -157,6 +157,7 @@ const ReportCalendar = ({
       >
         {days.map((day, index) => {
           const isSelected = day.id === selectedDate;
+          const status = statusClassNames[day.status];
 
           return (
             <button
@@ -177,10 +178,8 @@ const ReportCalendar = ({
               </span>
               <span
                 aria-hidden="true"
-                className={`size-6 rounded-full border ${
-                  isSelected
-                    ? 'border-2 border-text-main bg-transparent'
-                    : statusClassNames[day.status]
+                className={`size-6 rounded-full ${status.background} ${
+                  isSelected ? 'border-2 border-text-main' : `border ${status.border}`
                 }`}
               />
             </button>
