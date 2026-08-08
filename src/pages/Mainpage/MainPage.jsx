@@ -3,18 +3,18 @@ import { FiBell, FiCheck, FiChevronRight, FiDroplet, FiHeart, FiSmile, FiX } fro
 import { LuDumbbell } from 'react-icons/lu';
 
 const routines = [
-  { title: '아침 식단', time: '08:00', status: '완료', tone: 'green', icon: FiSmile },
-  { title: '물 2L 마시기', time: '13:00', status: '대체 미션 완료', tone: 'blue', icon: FiDroplet },
-  { title: '저녁 식단', time: '21:00', status: '대기', tone: 'green', icon: FiSmile },
-  { title: '스킨 케어', time: '23:00', status: '대기', tone: 'red', icon: FiHeart },
+  { id: 'morning-meal', title: '아침 식단', time: '08:00', status: '완료', tone: 'green', icon: FiSmile },
+  { id: 'water', title: '물 2L 마시기', time: '13:00', status: '대체 미션 완료', tone: 'blue', icon: FiDroplet },
+  { id: 'evening-meal', title: '저녁 식단', time: '21:00', status: '대기', tone: 'green', icon: FiSmile },
+  { id: 'skin-care', title: '스킨 케어', time: '23:00', status: '대기', tone: 'red', icon: FiHeart },
 ];
 
 const notifications = [
-  { id: 1, message: '00님, 오늘 저녁 운동 어떠세요?', time: '지금' },
-  { id: 2, message: '00님, 오늘 저녁 운동 어떠세요?', time: '1시간 전' },
-  { id: 3, message: '00님, 오늘 저녁 운동 어떠세요?', time: '2시간 전' },
-  { id: 4, message: '00님, 오늘 저녁 운동 어떠세요?', time: '5시간 전' },
-  { id: 5, message: '00님, 오늘 저녁 운동 어떠세요?', time: '6시간 전' },
+  { id: 1, message: '00님, 오늘 저녁 운동 어떠세요?', time: '지금', routineId: 'evening-meal' },
+  { id: 2, message: '00님, 오늘 저녁 운동 어떠세요?', time: '1시간 전', routineId: 'evening-meal' },
+  { id: 3, message: '00님, 오늘 저녁 운동 어떠세요?', time: '2시간 전', routineId: 'evening-meal' },
+  { id: 4, message: '00님, 오늘 저녁 운동 어떠세요?', time: '5시간 전', routineId: 'evening-meal' },
+  { id: 5, message: '00님, 오늘 저녁 운동 어떠세요?', time: '6시간 전', routineId: 'evening-meal' },
 ];
 
 const toneStyles = {
@@ -23,11 +23,52 @@ const toneStyles = {
   red: { icon: 'bg-[#f9dfdf] text-[#e78d84]', status: 'bg-[#ececec] text-[#777]' },
 };
 
-const RoutineItem = ({ icon: Icon, status, time, title, tone }) => {
+const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = false, onComplete, onToggle, status, time, title, tone }) => {
   const styles = toneStyles[tone];
-  const statusStyle = status.includes('완료') ? styles.status : 'bg-[#ececec] text-[#777]';
+  const isCompleted = status.includes('완료');
+  const statusStyle = isMissed
+    ? 'border border-[#e78d84] bg-[#fff4f2] text-[#c65f55]'
+    : status === '대체 미션 완료'
+      ? toneStyles.blue.status
+      : isCompleted
+        ? toneStyles.green.status
+        : 'bg-[#ececec] text-[#777]';
+  const displayedStatus = isMissed ? '미완료(자정)' : status;
+  const statusPadding = displayedStatus === '대체 미션 완료' ? 'px-3' : 'px-5';
+  const highlightStyle = isHighlighted
+    ? 'border-2 border-[#e78d84] shadow-[0_0_0_3px_rgba(231,141,132,0.08)]'
+    : 'border-[#ece9e2]';
+
+  if (isExpanded) {
+    return (
+      <article className={`rounded-[24px] border-2 bg-[#fffdf2] px-5 shadow-[0_5px_10px_rgba(170,136,36,0.08)] transition-all duration-300 ${isCompleted ? 'py-6' : 'pb-7 pt-8'} ${isHighlighted ? 'border-[#e78d84]' : 'border-[#f2d984]'}`} data-routine-id={id}>
+        <button className="flex w-full items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-primary" onClick={onToggle} type="button">
+          <div className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${styles.icon}`}>
+            <Icon aria-hidden="true" className="size-7" strokeWidth={2.4} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[16px] font-semibold tracking-[-0.03em] text-[#777268]">선택한 루틴이에요!</p>
+              <span className={`shrink-0 rounded-full py-2 text-[14px] font-semibold leading-none ${statusPadding} ${statusStyle}`}>{displayedStatus}</span>
+            </div>
+            <h3 className="whitespace-nowrap text-[30px] font-extrabold leading-tight tracking-[-0.05em] text-[#181818]">{title}</h3>
+            <p className="mt-1 text-[16px] font-semibold text-[#929292]">{time}</p>
+          </div>
+        </button>
+        {!isCompleted && !isMissed && (
+          <div className="mt-7 grid grid-cols-2 gap-3">
+            <button className="flex min-h-[58px] items-center justify-center gap-2 rounded-full bg-[#f4d15d] px-3 text-[17px] font-bold text-[#37322a] shadow-[0_4px_8px_rgba(178,145,49,0.18)] active:scale-[0.98]" onClick={onComplete} type="button">
+              <FiCheck className="size-5" strokeWidth={2.5} /> 완료했어요
+            </button>
+            <button className="min-h-[58px] rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" type="button">못 지킬 것 같아요</button>
+          </div>
+        )}
+      </article>
+    );
+  }
+
   return (
-    <div className="flex min-h-[76px] items-center gap-3 rounded-[19px] border border-[#ece9e2] bg-white px-3 shadow-[0_1px_2px_rgba(44,44,44,0.02)]">
+    <button className={`flex min-h-[76px] w-full items-center gap-3 rounded-[19px] border bg-white px-3 text-left transition-[border-color,box-shadow] duration-300 focus-visible:outline-2 focus-visible:outline-primary ${highlightStyle}`} data-routine-id={id} onClick={onToggle} type="button">
       <div className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${styles.icon}`}>
         <Icon aria-hidden="true" className="size-7" strokeWidth={2.4} />
       </div>
@@ -35,12 +76,11 @@ const RoutineItem = ({ icon: Icon, status, time, title, tone }) => {
         <p className="truncate text-[17px] font-bold leading-tight text-[#292929]">{title}</p>
         <p className="mt-0.5 text-[14px] leading-tight text-[#8d8d8d]">{time}</p>
       </div>
-      <span className={`shrink-0 rounded-full px-5 py-2 text-[14px] font-semibold leading-none ${statusStyle}`}>{status}</span>
-    </div>
+      <span className={`shrink-0 rounded-full py-2 text-[14px] font-semibold leading-none ${statusPadding} ${statusStyle}`}>{displayedStatus}</span>
+    </button>
   );
 };
-
-const NotificationPanel = ({ onClose }) => (
+const NotificationPanel = ({ onClose, onSelect }) => (
   <>
     <button aria-label="알림창 닫기" className="notification-backdrop fixed inset-x-0 bottom-[82px] top-0 z-40 cursor-default bg-black/25" onClick={onClose} type="button" />
     <section aria-labelledby="notification-title" aria-modal="true" className="notification-sheet fixed inset-x-0 bottom-[82px] z-[60] mx-auto h-[calc(71dvh-82px)] min-h-[500px] max-w-[600px] overflow-y-auto rounded-t-[42px] bg-[#fffefb] px-6 pb-8 pt-7 shadow-[0_-4px_18px_rgba(0,0,0,0.05)]" role="dialog">
@@ -53,7 +93,7 @@ const NotificationPanel = ({ onClose }) => (
       <ul>
         {notifications.map((notification) => (
           <li className="border-b border-[#d1d1d1]" key={notification.id}>
-            <button className="flex min-h-[90px] w-full items-center gap-4 px-2 text-left hover:bg-[#faf8f2] focus-visible:outline-2 focus-visible:outline-primary" type="button">
+            <button className="flex min-h-[90px] w-full items-center gap-4 px-2 text-left hover:bg-[#faf8f2] focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onSelect(notification.routineId)} type="button">
               <span aria-hidden="true" className="size-5 shrink-0 rounded-full bg-[#f1c856]" />
               <span className="min-w-0 flex-1 truncate text-[17px] font-medium tracking-[-0.025em] text-[#4b4b4b]">{notification.message}</span>
               <span className="shrink-0 text-[15px] font-medium text-[#777]">{notification.time}</span>
@@ -69,9 +109,26 @@ const NotificationPanel = ({ onClose }) => (
 const MainPage = () => {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isRoutineCompleted, setIsRoutineCompleted] = useState(false);
-  const completedRoutineCount = routines.filter(({ status }) => status.includes('완료')).length + (isRoutineCompleted ? 1 : 0);
+  const [highlightedRoutineId, setHighlightedRoutineId] = useState(null);
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(notifications.length > 0);
+  const [expandedRoutineId, setExpandedRoutineId] = useState(null);
+  const [completedRoutineIds, setCompletedRoutineIds] = useState(() =>
+    routines.filter(({ status }) => status.includes('완료')).map(({ id }) => id),
+  );
+  const completedRoutineCount = completedRoutineIds.length + (isRoutineCompleted ? 1 : 0);
   const totalRoutineCount = routines.length + 1;
   const routineAchievementRate = Math.round((completedRoutineCount / totalRoutineCount) * 100);
+
+  const handleNotificationSelect = (routineId) => {
+    setIsNotificationOpen(false);
+    setHighlightedRoutineId(routineId);
+    window.setTimeout(() => {
+      document.querySelector(`[data-routine-id="${routineId}"]`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 50);
+  };
 
   useEffect(() => {
     if (!isNotificationOpen) return undefined;
@@ -99,8 +156,9 @@ const MainPage = () => {
             <h1 className="text-[25px] font-bold tracking-[-0.04em] text-[#303030]">안녕하세요, 00님 <span aria-hidden="true">👋</span></h1>
             <p className="mt-1 text-[17px] tracking-[-0.025em] text-[#969696]">오늘도 꾸준히 이어가볼까요?</p>
           </div>
-          <button aria-expanded={isNotificationOpen} aria-label="알림 보기" className="mt-0.5 rounded-full p-2 text-[#303030] hover:bg-[#f5f1e7] focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setIsNotificationOpen(true)} type="button">
+          <button aria-expanded={isNotificationOpen} aria-label={hasUnreadNotifications ? '읽지 않은 알림 보기' : '알림 보기'} className="relative mt-0.5 rounded-full p-2 text-[#303030] hover:bg-[#f5f1e7] focus-visible:outline-2 focus-visible:outline-primary" onClick={() => { setIsNotificationOpen(true); setHasUnreadNotifications(false); }} type="button">
             <FiBell className="size-8" strokeWidth={2.2} />
+            {hasUnreadNotifications && <span aria-hidden="true" className="absolute right-1 top-1 size-2.5 rounded-full bg-[#f4d15d] ring-2 ring-[#fffdf7]" />}
           </button>
         </header>
 
@@ -129,7 +187,7 @@ const MainPage = () => {
               <h3 className="text-[32px] font-extrabold leading-tight tracking-[-0.05em] text-[#181818]">저녁 운동</h3>
               <p className="text-[16px] font-semibold text-[#929292]">19:00</p>
             </div>
-            <span className={`rounded-full px-5 py-2 text-[15px] font-semibold ${isRoutineCompleted ? 'bg-[#d9f2d5] text-[#64a56e]' : 'bg-[#eeeef0] text-[#838383]'}`}>{isRoutineCompleted ? '완료' : '진행중'}</span>
+            <span className={`min-w-[76px] rounded-full px-3 py-2 text-center text-[15px] font-semibold ${isRoutineCompleted ? 'bg-[#d9f2d5] text-[#64a56e]' : 'bg-[#eeeef0] text-[#838383]'}`}>{isRoutineCompleted ? '완료' : '진행중'}</span>
           </div>
           {!isRoutineCompleted && (
             <div className="mt-7 grid grid-cols-2 gap-3">
@@ -142,10 +200,20 @@ const MainPage = () => {
         </article>
 
         <div className="mt-6 flex flex-col gap-3">
-          {routines.map((routine) => <RoutineItem key={routine.title} {...routine} />)}
+          {routines.map((routine) => (
+            <RoutineItem
+              {...routine}
+              isExpanded={expandedRoutineId === routine.id}
+              isHighlighted={highlightedRoutineId === routine.id}
+              key={routine.id}
+              onComplete={() => setCompletedRoutineIds((current) => current.includes(routine.id) ? current : [...current, routine.id])}
+              onToggle={() => setExpandedRoutineId((current) => current === routine.id ? null : routine.id)}
+              status={completedRoutineIds.includes(routine.id) && !routine.status.includes('완료') ? '완료' : routine.status}
+            />
+          ))}
         </div>
       </section>
-      {isNotificationOpen && <NotificationPanel onClose={() => setIsNotificationOpen(false)} />}
+      {isNotificationOpen && <NotificationPanel onClose={() => setIsNotificationOpen(false)} onSelect={handleNotificationSelect} />}
     </>
   );
 };
