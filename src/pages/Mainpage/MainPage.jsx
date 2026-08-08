@@ -160,7 +160,7 @@ const MainPage = () => {
 
   return (
     <>
-      <section className="mx-auto flex w-full max-w-[430px] flex-col self-start pb-5 pt-7">
+      <section className="font-pretendard mx-auto flex w-full max-w-[430px] flex-col self-start pb-5 pt-7">
         <header className="flex min-h-[64px] items-center justify-between gap-4">
           <div>
             <h1 className="text-[24px] font-bold tracking-[-0.04em] text-[#303030]">안녕하세요, {mockUser.nickname}님 <span aria-hidden="true">👋</span></h1>
