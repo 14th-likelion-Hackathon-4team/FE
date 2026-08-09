@@ -158,3 +158,107 @@
     animation: none;
   }
 }
+@keyframes ai-suggestion-action-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-suggestion-actions > button {
+  animation: ai-suggestion-action-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ai-suggestion-actions > button:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.ai-suggestion-actions > button:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-suggestion-actions > button {
+    animation: none;
+  }
+}
+@keyframes ai-message-pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.9);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.025);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ai-message-pop {
+  transform-origin: top left;
+  animation: ai-message-pop-in 650ms cubic-bezier(0.22, 1, 0.36, 1) 150ms both;
+}
+
+.ai-proposal-pop {
+  transform-origin: top center;
+  animation: ai-message-pop-in 700ms cubic-bezier(0.22, 1, 0.36, 1) 750ms both;
+}
+
+.ai-suggestion-actions > button:first-child {
+  animation-delay: 1450ms;
+}
+
+.ai-suggestion-actions > button:nth-child(2) {
+  animation-delay: 1630ms;
+}
+
+.ai-suggestion-actions > button:nth-child(3) {
+  animation-delay: 1810ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-message-pop,
+  .ai-proposal-pop {
+    animation: none;
+  }
+}
+
+@keyframes ai-select-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-select-items > button {
+  animation: ai-select-item-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ai-select-items > button:nth-child(2) {
+  animation-delay: 110ms;
+}
+
+.ai-select-items > button:nth-child(3) {
+  animation-delay: 220ms;
+}
+
+.ai-select-items > button:nth-child(4) {
+  animation-delay: 330ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-select-items > button {
+    animation: none;
+  }
+}
