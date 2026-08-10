@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { FiBell, FiCheck, FiChevronRight, FiDroplet, FiHeart, FiSmile, FiX } from 'react-icons/fi';
 import { LuDumbbell } from 'react-icons/lu';
 
@@ -29,12 +30,13 @@ const toneStyles = {
   green: { icon: 'bg-[#d9f2d5] text-[#67bb82]', status: 'bg-[#d9f2d5] text-[#64a56e]' },
   blue: { icon: 'bg-[#dcebff] text-[#7baded]', status: 'bg-[#dceaff] text-[#6994cc]' },
   red: { icon: 'bg-[#f9dfdf] text-[#e78d84]', status: 'bg-[#ececec] text-[#777]' },
+  yellow: { icon: 'bg-[#fff5c7] text-[#8b78f2]', status: 'bg-[#ececec] text-[#777]' },
 };
 
 const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = false, onToggle, status, time, title, tone }) => {
   const styles = toneStyles[tone];
   const isCompleted = status.includes('완료');
-  const statusStyle = isMissed
+  const statusStyle = isMissed || status === '미완료'
     ? 'border border-[#e78d84] bg-[#fff4f2] text-[#c65f55]'
     : status === '대체 미션 완료'
       ? toneStyles.blue.status
@@ -112,6 +114,21 @@ const NotificationPanel = ({ onClose, onSelect, unreadNotificationIds }) => (
 );
 
 const MainPage = () => {
+  const location = useLocation();
+  const [routineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? null);
+  const displayedRoutines = routines.map((routine) => {
+    if (routine.id !== routineUpdate?.routineId) return routine;
+    if (routineUpdate.kind === 'rejected') return { ...routine, status: routineUpdate.status };
+
+    return {
+      ...routine,
+      title: routineUpdate.title,
+      time: routineUpdate.time ?? routine.time,
+      status: routineUpdate.status,
+      tone: routineUpdate.missionType === 'water' ? 'blue' : 'yellow',
+      icon: routineUpdate.missionType === 'water' ? FiDroplet : LuDumbbell,
+    };
+  });
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isRoutineCompleted, setIsRoutineCompleted] = useState(false);
   const [highlightedRoutineId, setHighlightedRoutineId] = useState(null);
@@ -223,7 +240,7 @@ const MainPage = () => {
         </article>
 
         <div className="mt-6 flex flex-col gap-3">
-          {routines.map((routine) => (
+          {displayedRoutines.map((routine) => (
             <RoutineItem
               {...routine}
               isExpanded={expandedRoutineId === routine.id}
