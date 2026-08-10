@@ -262,3 +262,27 @@
     animation: none;
   }
 }
+@keyframes ai-selection-toast {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  15%, 75% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.ai-selection-toast {
+  animation: ai-selection-toast 1800ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-selection-toast {
+    animation: none;
+  }
+}

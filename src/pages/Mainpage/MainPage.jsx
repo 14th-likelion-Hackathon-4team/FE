@@ -125,8 +125,8 @@ const MainPage = () => {
       title: routineUpdate.title,
       time: routineUpdate.time ?? routine.time,
       status: routineUpdate.status,
-      tone: 'yellow',
-      icon: LuDumbbell,
+      tone: routineUpdate.missionType === 'water' ? 'blue' : 'yellow',
+      icon: routineUpdate.missionType === 'water' ? FiDroplet : LuDumbbell,
     };
   });
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
