@@ -27,6 +27,9 @@ const appRoutes = [
     children: [
       { index: true, element: withSuspense(lazyRoutes.MainPage) },
       { path: "routines", element: withSuspense(lazyRoutes.RoutinePage) },
+      { path: "routines/new", element: withSuspense(lazyRoutes.RoutineCreatePage) },
+      { path: "routines/:routineId", element: withSuspense(lazyRoutes.RoutineDetailPage) },
+      { path: "routines/:routineId/edit", element: withSuspense(lazyRoutes.RoutineEditPage) },
       { path: "reports", element: withSuspense(lazyRoutes.ReportPage) },
       { path: "mypage", element: withSuspense(lazyRoutes.MyPage) },
       { path: "aichat", element: withSuspense(lazyRoutes.AiChatPage) },
