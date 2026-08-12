@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
 const LoginPage = () => {
   const navigate = useNavigate();
 
@@ -9,10 +11,12 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [nickname, setNickname] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const hasError = Boolean(errorMessage);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!userId || !password) {
@@ -20,22 +24,43 @@ const LoginPage = () => {
       return;
     }
 
-    const isLoginSuccess = false; 
-
-    if (!isLoginSuccess) {
-      setErrorMessage('아이디 또는 비밀번호가 일치하지 않습니다.');
-      return;
-    }
-
+    setIsSubmitting(true);
     setErrorMessage('');
-    setIsLoggedIn(true);
+
+    try {
+      const response = await fetch(`${BASE_URL}/api/v1/routinefit/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loginId: userId,
+          password,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || '아이디 또는 비밀번호가 일치하지 않습니다.');
+      }
+
+      const { accessToken, refreshToken, user } = result.data;
+
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+
+      setNickname(user.nickname);
+      setIsLoggedIn(true);
+    } catch (err) {
+      setErrorMessage(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleGoToMain = () => {
     navigate('/');
   };
 
-  // 로그인 성공 후 화면
   if (isLoggedIn) {
     return (
       <div className="flex w-full max-w-[360px] flex-col items-center gap-8">
@@ -54,7 +79,7 @@ const LoginPage = () => {
           <span className="text-[32px]">👋</span>
           <p className="text-[20px] font-semibold text-[#2C2C2C]">다시 만나서 반가워요!</p>
           <p className="text-center text-[14px] font-normal text-[#2C2C2C]">
-            {userId}님,
+            {nickname}님,
             <br />
             오늘도 함께 시작해볼까요?
           </p>
@@ -70,10 +95,8 @@ const LoginPage = () => {
     );
   }
 
-  // 기본 로그인 폼 화면
   return (
     <div className="flex w-full max-w-[360px] flex-col items-center gap-8">
-      {/* 타이틀 + 로고 */}
       <div className="flex flex-col items-center gap-0">
         <h1 className="text-[32px] font-extrabold text-[#2C2C2C]">Routine Fit</h1>
         <img
@@ -84,7 +107,6 @@ const LoginPage = () => {
         <p className="text-[20px] font-normal text-[#2C2C2C]">완벽한 하루 말고, 놓치지 않는 하루</p>
       </div>
 
-      {/* 로그인 폼 */}
       <form className="flex w-full flex-col gap-4" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-1.5">
           <label className="text-[14px] font-normal text-text-main" htmlFor="userId">
@@ -137,14 +159,14 @@ const LoginPage = () => {
         )}
 
         <button
-          className="mt-2 h-[52px] w-full rounded-xl bg-primary text-[16px] font-semibold text-text-main"
+          className="mt-2 h-[52px] w-full rounded-xl bg-primary text-[16px] font-semibold text-text-main disabled:opacity-60"
+          disabled={isSubmitting}
           type="submit"
         >
-          로그인
+          {isSubmitting ? '로그인 중...' : '로그인'}
         </button>
       </form>
 
-      {/* 하단 링크 */}
       <div className="flex flex-col items-center gap-3 text-[12px] font-normal text-text-muted">
         <div className="flex gap-3">
           <button className="hover:text-text-main" type="button">

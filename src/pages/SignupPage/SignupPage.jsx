@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -12,21 +14,51 @@ const SignupPage = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [signupError, setSignupError] = useState('');
   const [isSignedUp, setIsSignedUp] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successNickname, setSuccessNickname] = useState('');
+
+  // 'available' | 'unavailable' | null
+  const [idCheckResult, setIdCheckResult] = useState(null);
+  const [checkedUserId, setCheckedUserId] = useState('');
 
   const specialCharRegex = /[^a-zA-Z0-9]/;
   const hasIdError = userId.length > 0 && specialCharRegex.test(userId);
-  const isIdAvailable = userId.length > 0 && !hasIdError; 
 
-  // 영문 + 숫자 포함 8자 이상
   const passwordRuleRegex = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
   const hasPasswordError = password.length > 0 && !passwordRuleRegex.test(password);
   const hasConfirmPasswordError = confirmPassword.length > 0 && confirmPassword !== password;
+  const hasNicknameError = nickname.length > 20;
 
-  const handleUserIdChange = (e) => {
-    setUserId(e.target.value);
-  };
+  const isChecking = Boolean(userId) && !hasIdError && checkedUserId !== userId;
+  const effectiveIdCheckStatus = !userId || hasIdError
+    ? 'idle'
+    : isChecking
+      ? 'checking'
+      : (idCheckResult ?? 'idle');
 
-  const handleSubmit = (e) => {
+  // 아이디 중복확인 (디바운스 500ms)
+  useEffect(() => {
+    if (!userId || hasIdError) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      fetch(`${BASE_URL}/api/v1/routinefit/auth/check-id?loginId=${encodeURIComponent(userId)}`)
+        .then((res) => res.json())
+        .then((result) => {
+          setIdCheckResult(result.data.available ? 'available' : 'unavailable');
+          setCheckedUserId(userId);
+        })
+        .catch(() => {
+          setIdCheckResult(null);
+          setCheckedUserId(userId);
+        });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [userId, hasIdError]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!nickname || !userId || !password || !confirmPassword) {
@@ -34,37 +66,53 @@ const SignupPage = () => {
       return;
     }
 
-    if (hasIdError) {
+    if (hasNicknameError || hasIdError || hasPasswordError || password !== confirmPassword) {
       setSignupError('회원가입에 실패했습니다. 다시 시도해주세요.');
       return;
     }
 
-    if (hasPasswordError) {
-      setSignupError('회원가입에 실패했습니다. 다시 시도해주세요.');
+    if (effectiveIdCheckStatus !== 'available') {
+      setSignupError('아이디 중복확인을 완료해주세요.');
       return;
     }
 
-    if (password !== confirmPassword) {
-      setSignupError('회원가입에 실패했습니다. 다시 시도해주세요.');
-      return;
-    }
-
-    const isSignupSuccess = false; 
-
-    if (!isSignupSuccess) {
-      setSignupError('회원가입에 실패했습니다. 다시 시도해주세요.');
-      return;
-    }
-
+    setIsSubmitting(true);
     setSignupError('');
-    setIsSignedUp(true);
+
+    try {
+      const response = await fetch(`${BASE_URL}/api/v1/routinefit/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loginId: userId,
+          password,
+          nickname,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          setIdCheckResult('unavailable');
+          setCheckedUserId(userId);
+        }
+        throw new Error(result.message || '회원가입에 실패했습니다. 다시 시도해주세요.');
+      }
+
+      setSuccessNickname(result.data.nickname);
+      setIsSignedUp(true);
+    } catch (err) {
+      setSignupError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleGoToRoutines = () => {
     navigate('/routines');
   };
 
-  // 회원가입 성공 후 화면
   if (isSignedUp) {
     return (
       <div className="flex w-full max-w-[360px] flex-col items-center gap-8">
@@ -83,7 +131,7 @@ const SignupPage = () => {
           <span className="text-[32px]">🎉</span>
           <p className="text-[20px] font-semibold text-[#2C2C2C]">회원가입에 성공했습니다!</p>
           <p className="text-center text-[14px] font-normal text-[#2C2C2C]">
-            {nickname}님,
+            {successNickname}님,
             <br />
             환영해요.
             <br />
@@ -101,25 +149,20 @@ const SignupPage = () => {
     );
   }
 
-  // 기본 회원가입 폼 화면
   return (
-    <div className="flex w-full max-w-[360px] flex-col items-center gap-6">
-      {/* 타이틀 */}
+    <div className="flex w-full max-w-[360px] flex-col gap-6">
       <div className="flex flex-col items-center gap-1">
         <h1 className="text-[20px] font-extrabold text-[#2C2C2C]">회원가입</h1>
         <p className="text-[14px] font-normal text-[#2C2C2C]">루틴핏과 함께 시작해봐요</p>
       </div>
 
-      {/* 실패 배너 */}
       {signupError && (
         <div className="w-full rounded-xl border border-[#D50505] bg-[#FFE8EB] px-4 py-3 text-[14px] font-semibold text-[#D50505]">
           ⚠️{signupError}
         </div>
       )}
 
-      {/* 회원가입 폼 */}
       <form className="flex w-full flex-col gap-4" onSubmit={handleSubmit}>
-        {/* 닉네임 */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <label className="text-[14px] font-normal text-[#2C2C2C]" htmlFor="nickname">
@@ -130,16 +173,22 @@ const SignupPage = () => {
             </span>
           </div>
           <input
-            className="h-[48px] w-full rounded-xl border border-primary-soft bg-surface px-4 text-[14px] font-normal text-text-main placeholder:text-[14px] placeholder:font-normal placeholder:text-[#8A8A8A] focus:border-primary focus:outline-none"
+            className={`h-[48px] w-full rounded-xl border px-4 text-[14px] font-normal text-text-main placeholder:text-[14px] placeholder:font-normal placeholder:text-[#8A8A8A] focus:outline-none ${
+              hasNicknameError
+                ? 'border-[#D50505] bg-[#FFE8EB]'
+                : 'border-primary-soft bg-surface focus:border-primary'
+            }`}
             id="nickname"
             onChange={(e) => setNickname(e.target.value)}
             placeholder="AI 대화에서 불릴 이름"
             type="text"
             value={nickname}
           />
+          {hasNicknameError && (
+            <p className="text-[12px] font-medium text-[#D50505]">닉네임은 20자 이내로 입력해주세요</p>
+          )}
         </div>
 
-        {/* 아이디 */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <label className="text-[14px] font-normal text-[#2C2C2C]" htmlFor="userId">
@@ -151,12 +200,12 @@ const SignupPage = () => {
           </div>
           <input
             className={`h-[48px] w-full rounded-xl border px-4 text-[14px] font-normal text-text-main placeholder:text-[14px] placeholder:font-normal placeholder:text-[#8A8A8A] focus:outline-none ${
-              hasIdError
+              hasIdError || effectiveIdCheckStatus === 'unavailable'
                 ? 'border-[#D50505] bg-[#FFE8EB]'
                 : 'border-primary-soft bg-surface focus:border-primary'
             }`}
             id="userId"
-            onChange={handleUserIdChange}
+            onChange={(e) => setUserId(e.target.value)}
             placeholder="아이디를 입력하세요"
             type="text"
             value={userId}
@@ -164,12 +213,17 @@ const SignupPage = () => {
           {hasIdError && (
             <p className="text-[12px] font-medium text-[#D50505]">특수문자는 사용할 수 없습니다</p>
           )}
-          {!hasIdError && isIdAvailable && (
+          {!hasIdError && effectiveIdCheckStatus === 'checking' && (
+            <p className="text-[12px] font-medium text-text-muted">확인 중...</p>
+          )}
+          {!hasIdError && effectiveIdCheckStatus === 'available' && (
             <p className="text-[12px] font-medium text-[#4F8C5B]">✓ 사용 가능한 아이디에요</p>
+          )}
+          {!hasIdError && effectiveIdCheckStatus === 'unavailable' && (
+            <p className="text-[12px] font-medium text-[#D50505]">이미 사용 중인 아이디입니다</p>
           )}
         </div>
 
-        {/* 비밀번호 */}
         <div className="flex flex-col gap-1.5">
           <label className="text-[14px] font-normal text-[#2C2C2C]" htmlFor="password">
             비밀번호
@@ -207,7 +261,6 @@ const SignupPage = () => {
           )}
         </div>
 
-        {/* 비밀번호 확인 */}
         <div className="flex flex-col gap-1.5">
           <label className="text-[14px] font-normal text-[#2C2C2C]" htmlFor="confirmPassword">
             비밀번호 확인
@@ -244,14 +297,14 @@ const SignupPage = () => {
         </div>
 
         <button
-          className="mt-2 h-[52px] w-full rounded-xl bg-primary text-[16px] font-semibold text-[#2C2C2C]"
+          className="mt-2 h-[52px] w-full rounded-xl bg-primary text-[16px] font-semibold text-[#2C2C2C] disabled:opacity-60"
+          disabled={isSubmitting}
           type="submit"
         >
-          회원가입
+          {isSubmitting ? '가입 중...' : '회원가입'}
         </button>
       </form>
 
-      {/* 하단 링크 */}
       <p className="text-[12px] font-normal text-[#000000]">
         이미 계정이 있으신가요?{' '}
         <Link className="font-bold text-[#000000]" to="/login">
