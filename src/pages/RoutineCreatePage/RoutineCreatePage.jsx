@@ -15,16 +15,6 @@ const longDayCodes = {
   일: 'SUN',
 };
 
-const shortDayCodes = {
-  월: 'MO',
-  화: 'TU',
-  수: 'WE',
-  목: 'TH',
-  금: 'FR',
-  토: 'SA',
-  일: 'SU',
-};
-
 const repeatTypeCodes = {
   days: 'WEEKLY',
   daily: 'DAILY',
@@ -50,21 +40,20 @@ const calculateAlarmTime = (performTime, notificationTiming) => {
 const getRepeatValues = (routine) => {
   if (routine.repeatType === 'daily') {
     return {
-      repeatDays: 'MO,TU,WE,TH,FR,SA,SU',
+      repeatDays: 'MON,TUE,WED,THU,FRI,SAT,SUN',
       repeatCount: null,
     };
   }
 
   if (routine.repeatType === 'count') {
     return {
-      repeatDays: 'NONE',
+      repeatDays: null,
       repeatCount: Number(routine.repeatCount),
     };
   }
 
-  const dayCodes = routine.days.length > 5 ? shortDayCodes : longDayCodes;
   return {
-    repeatDays: routine.days.map((day) => dayCodes[day]).join(','),
+    repeatDays: routine.days.map((day) => longDayCodes[day]).join(','),
     repeatCount: null,
   };
 };
