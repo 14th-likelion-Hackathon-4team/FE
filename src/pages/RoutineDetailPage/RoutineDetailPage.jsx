@@ -79,6 +79,16 @@ const getHistoryStyle = (status) => {
   return 'border-primary-soft bg-surface';
 };
 
+const getStatusErrorMessage = (error) => {
+  const status = error.response?.status;
+  const serverMessage = error.response?.data?.message;
+
+  if (status === 401) return '로그인이 만료되었습니다. 다시 로그인해주세요.';
+  if (status === 403) return '이 루틴의 상태를 변경할 권한이 없습니다.';
+  if (status === 404) return '존재하지 않거나 삭제된 루틴입니다.';
+  return serverMessage || '루틴 상태를 변경하지 못했습니다.';
+};
+
 const RoutineDetailPage = () => {
   const { routineId } = useParams();
   const navigate = useNavigate();
@@ -135,13 +145,49 @@ const RoutineDetailPage = () => {
   const handleClose = () => navigate('/routines');
   const handleEdit = () => navigate(`/routines/${routineId}/edit`);
 
+  const handleToggleRoutine = async (active) => {
+    if (!routine) return;
+
+    const nextActive = typeof active === 'boolean' ? active : !routine.active;
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
+      window.alert('로그인 정보가 없습니다. 다시 로그인해주세요.');
+      return;
+    }
+
+    try {
+      const response = await axios.patch(
+        `${BASE_URL}/api/v1/routinefit/routines/${routineId}/status`,
+        { active: nextActive },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      const updatedActive = response.data?.data?.active;
+
+      setRoutine((current) => (
+        current
+          ? {
+            ...current,
+            active: typeof updatedActive === 'boolean' ? updatedActive : nextActive,
+          }
+          : current
+      ));
+    } catch (error) {
+      window.alert(getStatusErrorMessage(error));
+    }
+  };
+
   const handleConfirmDelete = () => {
     setDeleteOpen(false);
     navigate('/routines', { replace: true });
   };
 
   const handlePauseInstead = () => {
-    setRoutine((current) => (current ? { ...current, active: false } : current));
+    handleToggleRoutine(false);
     setDeleteOpen(false);
   };
 
@@ -181,7 +227,7 @@ const RoutineDetailPage = () => {
           <h2 className="text-[20px] font-bold text-text-main">{routine.title}</h2>
 
           <div className="mt-2.5 flex items-center gap-2.5">
-            <button aria-label="루틴 활성 상태" aria-pressed={routine.active} className="relative h-6 w-[42px] shrink-0 rounded-full border border-primary-soft bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" onClick={() => setRoutine((current) => ({ ...current, active: !current.active }))} type="button">
+            <button aria-label="루틴 활성 상태" aria-pressed={routine.active} className="relative h-6 w-[42px] shrink-0 rounded-full border border-primary-soft bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" onClick={() => handleToggleRoutine()} type="button">
               <span aria-hidden="true" className={`absolute left-[2px] top-[2px] size-[18px] rounded-full border border-primary-soft transition-transform ${routine.active ? 'translate-x-[19px] bg-primary' : 'translate-x-0 bg-surface'}`} />
             </button>
             <span className="text-[13px] font-medium text-text-main">

@@ -45,6 +45,16 @@ const toRoutine = (routine) => ({
   active: routine.active,
 });
 
+const getStatusErrorMessage = (error) => {
+  const status = error.response?.status;
+  const serverMessage = error.response?.data?.message;
+
+  if (status === 401) return "로그인이 만료되었습니다. 다시 로그인해주세요.";
+  if (status === 403) return "이 루틴의 상태를 변경할 권한이 없습니다.";
+  if (status === 404) return "존재하지 않거나 삭제된 루틴입니다.";
+  return serverMessage || "루틴 상태를 변경하지 못했습니다.";
+};
+
 const RoutinePage = () => {
   const navigate = useNavigate();
   const [routines, setRoutines] = useState([]);
@@ -124,14 +134,44 @@ const RoutinePage = () => {
     setSelectedDay(day);
     fetchRoutines(dayToApiDay[day]);
   };
-  const handleToggleRoutine = (routineId) =>
-    setRoutines((items) =>
-      items.map((routine) =>
-        routine.id === routineId
-          ? { ...routine, active: !routine.active }
-          : routine,
-      ),
-    );
+  const handleToggleRoutine = async (routineId, active) => {
+    const targetRoutine = routines.find((routine) => routine.id === routineId);
+    if (!targetRoutine) return;
+
+    const nextActive = typeof active === "boolean" ? active : !targetRoutine.active;
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      window.alert("로그인 정보가 없습니다. 다시 로그인해주세요.");
+      return;
+    }
+
+    try {
+      const response = await axios.patch(
+        `${BASE_URL}/api/v1/routinefit/routines/${routineId}/status`,
+        { active: nextActive },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+      const updatedActive = response.data?.data?.active;
+
+      setRoutines((items) =>
+        items.map((routine) =>
+          routine.id === routineId
+            ? {
+                ...routine,
+                active: typeof updatedActive === "boolean" ? updatedActive : nextActive,
+              }
+            : routine,
+        ),
+      );
+    } catch (error) {
+      window.alert(getStatusErrorMessage(error));
+    }
+  };
 
   const handleRequestDelete = (routineId) => {
     setActionRoutineId(null);
@@ -152,7 +192,7 @@ const RoutinePage = () => {
 
   const handlePauseInstead = () => {
     if (deleteRoutineId) {
-      handleToggleRoutine(deleteRoutineId);
+      handleToggleRoutine(deleteRoutineId, false);
     }
     setDeleteRoutineId(null);
   };
