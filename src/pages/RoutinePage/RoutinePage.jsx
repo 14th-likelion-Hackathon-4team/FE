@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import RoutineActionSheet from "./components/RoutineActionSheet";
 import DeleteConfirmDialog from "./components/DeleteConfirmDialog";
 import RoutineList from "./components/RoutineList";
-import RoutineToast from "./components/RoutineToast";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -55,6 +54,16 @@ const getStatusErrorMessage = (error) => {
   return serverMessage || "루틴 상태를 변경하지 못했습니다.";
 };
 
+const getDeleteErrorMessage = (error) => {
+  const status = error.response?.status;
+  const serverMessage = error.response?.data?.message;
+
+  if (status === 401) return "로그인이 만료되었습니다. 다시 로그인해주세요.";
+  if (status === 403) return "이 루틴을 삭제할 권한이 없습니다.";
+  if (status === 404) return "존재하지 않거나 이미 삭제된 루틴입니다.";
+  return serverMessage || "루틴을 삭제하지 못했습니다.";
+};
+
 const RoutinePage = () => {
   const navigate = useNavigate();
   const [routines, setRoutines] = useState([]);
@@ -63,8 +72,6 @@ const RoutinePage = () => {
   const [fetchError, setFetchError] = useState("");
   const [actionRoutineId, setActionRoutineId] = useState(null);
   const [deleteRoutineId, setDeleteRoutineId] = useState(null);
-  const [deletedRoutine, setDeletedRoutine] = useState(null);
-  const [toastVisible, setToastVisible] = useState(false);
 
   const fetchRoutines = useCallback(async (day, showLoading = true) => {
     if (showLoading) {
@@ -117,12 +124,6 @@ const RoutinePage = () => {
       ),
     [routines],
   );
-
-  useEffect(() => {
-    if (!toastVisible) return undefined;
-    const timeoutId = window.setTimeout(() => setToastVisible(false), 4000);
-    return () => window.clearTimeout(timeoutId);
-  }, [toastVisible]);
 
   const handleOpenCreate = () => navigate("/routines/new");
   const handleOpenDetail = (routineId) => navigate(`/routines/${routineId}`);
@@ -178,16 +179,31 @@ const RoutinePage = () => {
     setDeleteRoutineId(routineId);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     const routineId = deleteRoutineId;
-    const index = routines.findIndex((routine) => routine.id === routineId);
-    const routine = routines[index];
-    if (!routine) return;
-    setDeletedRoutine({ index, routine });
-    setRoutines((items) => items.filter((item) => item.id !== routineId));
-    setActionRoutineId(null);
-    setDeleteRoutineId(null);
-    setToastVisible(true);
+    if (!routineId) return;
+
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      window.alert("로그인 정보가 없습니다. 다시 로그인해주세요.");
+      return;
+    }
+
+    try {
+      await axios.delete(
+        `${BASE_URL}/api/v1/routinefit/routines/${routineId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+      setRoutines((items) => items.filter((item) => item.id !== routineId));
+      setActionRoutineId(null);
+      setDeleteRoutineId(null);
+    } catch (error) {
+      window.alert(getDeleteErrorMessage(error));
+    }
   };
 
   const handlePauseInstead = () => {
@@ -195,17 +211,6 @@ const RoutinePage = () => {
       handleToggleRoutine(deleteRoutineId, false);
     }
     setDeleteRoutineId(null);
-  };
-
-  const handleUndoDelete = () => {
-    if (!deletedRoutine) return;
-    setRoutines((items) => {
-      const restored = [...items];
-      restored.splice(deletedRoutine.index, 0, deletedRoutine.routine);
-      return restored;
-    });
-    setDeletedRoutine(null);
-    setToastVisible(false);
   };
 
   if (isLoading || fetchError) {
@@ -240,7 +245,6 @@ const RoutinePage = () => {
         onPause={handlePauseInstead}
         routine={deleteRoutine}
       />
-      <RoutineToast onUndo={handleUndoDelete} visible={toastVisible} />
     </>
   );
 };

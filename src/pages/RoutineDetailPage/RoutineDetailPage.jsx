@@ -89,6 +89,16 @@ const getStatusErrorMessage = (error) => {
   return serverMessage || '루틴 상태를 변경하지 못했습니다.';
 };
 
+const getDeleteErrorMessage = (error) => {
+  const status = error.response?.status;
+  const serverMessage = error.response?.data?.message;
+
+  if (status === 401) return '로그인이 만료되었습니다. 다시 로그인해주세요.';
+  if (status === 403) return '이 루틴을 삭제할 권한이 없습니다.';
+  if (status === 404) return '존재하지 않거나 이미 삭제된 루틴입니다.';
+  return serverMessage || '루틴을 삭제하지 못했습니다.';
+};
+
 const RoutineDetailPage = () => {
   const { routineId } = useParams();
   const navigate = useNavigate();
@@ -181,9 +191,27 @@ const RoutineDetailPage = () => {
     }
   };
 
-  const handleConfirmDelete = () => {
-    setDeleteOpen(false);
-    navigate('/routines', { replace: true });
+  const handleConfirmDelete = async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
+      window.alert('로그인 정보가 없습니다. 다시 로그인해주세요.');
+      return;
+    }
+
+    try {
+      await axios.delete(
+        `${BASE_URL}/api/v1/routinefit/routines/${routineId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+      setDeleteOpen(false);
+      navigate('/routines', { replace: true });
+    } catch (error) {
+      window.alert(getDeleteErrorMessage(error));
+    }
   };
 
   const handlePauseInstead = () => {

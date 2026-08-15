@@ -111,6 +111,16 @@ const getErrorMessage = (error, action) => {
   return serverMessage || `루틴을 ${action}하지 못했습니다.`;
 };
 
+const getDeleteErrorMessage = (error) => {
+  const status = error.response?.status;
+  const serverMessage = error.response?.data?.message;
+
+  if (status === 401) return '로그인이 만료되었습니다. 다시 로그인해주세요.';
+  if (status === 403) return '이 루틴을 삭제할 권한이 없습니다.';
+  if (status === 404) return '존재하지 않거나 이미 삭제된 루틴입니다.';
+  return serverMessage || '루틴을 삭제하지 못했습니다.';
+};
+
 const RoutineEditPage = () => {
   const { routineId } = useParams();
   const navigate = useNavigate();
@@ -203,6 +213,29 @@ const RoutineEditPage = () => {
     }
   };
 
+  const handleConfirmDelete = async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
+      window.alert('로그인 정보가 없습니다. 다시 로그인해주세요.');
+      return;
+    }
+
+    try {
+      await axios.delete(
+        `${BASE_URL}/api/v1/routinefit/routines/${routineId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+      setDeleteOpen(false);
+      navigate('/routines', { replace: true });
+    } catch (error) {
+      window.alert(getDeleteErrorMessage(error));
+    }
+  };
+
   if (isLoading || fetchError || !routine) {
     return (
       <section className="flex min-h-[792px] w-[402px] min-w-[402px] max-w-[402px] shrink-0 flex-col self-start bg-background pb-10">
@@ -231,7 +264,7 @@ const RoutineEditPage = () => {
       />
       <DeleteConfirmDialog
         onCancel={() => setDeleteOpen(false)}
-        onConfirm={() => navigate('/routines', { replace: true })}
+        onConfirm={handleConfirmDelete}
         onPause={() => setDeleteOpen(false)}
         routine={deleteOpen ? routine : null}
       />
