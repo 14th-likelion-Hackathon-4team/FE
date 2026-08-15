@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FiChevronLeft, FiDroplet, FiHeart, FiSmile } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://54.117.20.73:8080';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const authenticatedRequest = async (path, options = {}) => {
   const accessToken = localStorage.getItem('accessToken');
