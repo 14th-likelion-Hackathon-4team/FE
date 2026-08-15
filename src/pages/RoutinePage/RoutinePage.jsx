@@ -92,6 +92,7 @@ const RoutinePage = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- API response updates state asynchronously.
     fetchRoutines(undefined, false);
   }, [fetchRoutines]);
 
