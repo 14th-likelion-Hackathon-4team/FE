@@ -1,32 +1,78 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { FiBell, FiCheck, FiChevronRight, FiDroplet, FiHeart, FiSmile, FiX } from 'react-icons/fi';
-import { LuDumbbell } from 'react-icons/lu';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  FiBell,
+  FiBookOpen,
+  FiCheck,
+  FiChevronRight,
+  FiDroplet,
+  FiHeart,
+  FiHome,
+  FiMoon,
+  FiSmile,
+  FiSun,
+  FiX,
+} from 'react-icons/fi';
+import { LuCoffee, LuCookie, LuDumbbell, LuFootprints, LuUtensils } from 'react-icons/lu';
 import { completeRoutine, getMainPage, getMyProfile, getTodayNotifications, readNotification } from '@/api/mainApi';
 
+const parseScheduledTime = (scheduledTime) => {
+  if (!scheduledTime) return { hour: 0, minute: 0, isValid: false };
+
+  if (typeof scheduledTime === 'string') {
+    const [hour, minute] = scheduledTime.split(':').map(Number);
+    return {
+      hour: Number.isFinite(hour) ? hour : 0,
+      minute: Number.isFinite(minute) ? minute : 0,
+      isValid: Number.isFinite(hour) && Number.isFinite(minute),
+    };
+  }
+
+  const hour = Number(scheduledTime.hour);
+  const minute = Number(scheduledTime.minute);
+  return {
+    hour: Number.isFinite(hour) ? hour : 0,
+    minute: Number.isFinite(minute) ? minute : 0,
+    isValid: Number.isFinite(hour) && Number.isFinite(minute),
+  };
+};
+
 const formatScheduledTime = (scheduledTime) => {
-  if (!scheduledTime) return '--:--';
-  const hour = String(scheduledTime.hour ?? 0).padStart(2, '0');
-  const minute = String(scheduledTime.minute ?? 0).padStart(2, '0');
-  return `${hour}:${minute}`;
+  const { hour, minute, isValid } = parseScheduledTime(scheduledTime);
+  if (!isValid) return '--:--';
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 };
 
 const getRoutineVisual = (routineName = '') => {
-  if (/물|수분/.test(routineName)) return { tone: 'blue', icon: FiDroplet };
-  if (/운동|스트레칭/.test(routineName)) return { tone: 'yellow', icon: LuDumbbell };
-  if (/스킨|약|케어/.test(routineName)) return { tone: 'red', icon: FiHeart };
+  const normalizedName = routineName.trim();
+
+  if (/물|수분|음수/.test(normalizedName)) return { tone: 'blue', icon: FiDroplet };
+  if (/산책|걷기|걸음|러닝|달리기|조깅/.test(normalizedName)) return { tone: 'yellow', icon: LuFootprints };
+  if (/운동|스트레칭|헬스|요가|필라테스/.test(normalizedName)) return { tone: 'yellow', icon: LuDumbbell };
+  if (/공부|독서|책|과제|학습/.test(normalizedName)) return { tone: 'blue', icon: FiBookOpen };
+  if (/기상|일어나/.test(normalizedName)) return { tone: 'yellow', icon: FiSun };
+  if (/수면|잠|취침|낮잠/.test(normalizedName)) return { tone: 'yellow', icon: FiMoon };
+  if (/청소|정리|집안일|설거지/.test(normalizedName)) return { tone: 'green', icon: FiHome };
+  if (/스킨|약|복용|영양제|케어|양치|세안|샤워/.test(normalizedName)) return { tone: 'red', icon: FiHeart };
+  if (/간식|과자|디저트|야식/.test(normalizedName)) return { tone: 'yellow', icon: LuCookie };
+  if (/커피|카페인|차 마시|티타임/.test(normalizedName)) return { tone: 'red', icon: LuCoffee };
+  if (/식사|식단|아침|점심|저녁|밥/.test(normalizedName)) return { tone: 'green', icon: LuUtensils };
   return { tone: 'green', icon: FiSmile };
 };
 
-const normalizeRoutine = (routine) => ({
-  id: routine.routineId,
-  title: routine.routineName,
-  time: formatScheduledTime(routine.scheduledTime),
-  scheduledMinutes: (routine.scheduledTime?.hour ?? 0) * 60 + (routine.scheduledTime?.minute ?? 0),
-  status: routine.completed ? '완료' : '대기',
-  completed: Boolean(routine.completed),
-  ...getRoutineVisual(routine.routineName),
-});
+const normalizeRoutine = (routine) => {
+  const { hour, minute } = parseScheduledTime(routine.scheduledTime);
+
+  return {
+    id: routine.routineId,
+    title: routine.routineName,
+    time: formatScheduledTime(routine.scheduledTime),
+    scheduledMinutes: hour * 60 + minute,
+    status: routine.completed ? '완료' : '대기',
+    completed: Boolean(routine.completed),
+    ...getRoutineVisual(routine.routineName),
+  };
+};
 const toneStyles = {
   green: { icon: 'bg-[#d9f2d5] text-[#67bb82]', status: 'bg-[#d9f2d5] text-[#64a56e]' },
   blue: { icon: 'bg-[#dcebff] text-[#7baded]', status: 'bg-[#dceaff] text-[#6994cc]' },
@@ -34,7 +80,7 @@ const toneStyles = {
   yellow: { icon: 'bg-[#fff5c7] text-[#8b78f2]', status: 'bg-[#ececec] text-[#777]' },
 };
 
-const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = false, onToggle, status, time, title, tone }) => {
+const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = false, onCannotComplete, onToggle, status, time, title, tone }) => {
   const styles = toneStyles[tone];
   const isCompleted = status.includes('완료');
   const statusStyle = isMissed || status === '미완료'
@@ -68,7 +114,7 @@ const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = fal
         </button>
         {!isCompleted && !isMissed && (
           <div className="mt-7">
-            <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" type="button">못 지킬 것 같아요</button>
+            <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={onCannotComplete} type="button">못 지킬 것 같아요</button>
           </div>
         )}
       </article>
@@ -131,6 +177,7 @@ const NotificationPanel = ({ errorMessage, isLoading, notifications, onClose, on
 );
 const MainPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [routineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? null);
   const [mainData, setMainData] = useState({ userName: '', todayRoutines: [] });
   const [isLoading, setIsLoading] = useState(true);
@@ -143,6 +190,7 @@ const MainPage = () => {
   const [notificationError, setNotificationError] = useState('');
   const [highlightedRoutineId, setHighlightedRoutineId] = useState(null);
   const [expandedRoutineId, setExpandedRoutineId] = useState(null);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
 
   const apiRoutines = mainData.todayRoutines.map(normalizeRoutine).sort((a, b) => a.scheduledMinutes - b.scheduledMinutes);
   const displayedRoutines = apiRoutines.map((routine) => {
@@ -158,10 +206,14 @@ const MainPage = () => {
       icon: routineUpdate.missionType === 'water' ? FiDroplet : LuDumbbell,
     };
   });
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
   const incompleteRoutines = displayedRoutines.filter(({ completed, status }) => !completed && !status.includes('완료'));
-  const currentRoutine = incompleteRoutines.find(({ scheduledMinutes }) => scheduledMinutes >= nowMinutes)
+  const activeRoutine = [...incompleteRoutines]
+    .reverse()
+    .find(({ scheduledMinutes }) => scheduledMinutes <= nowMinutes && nowMinutes < scheduledMinutes + 60);
+  const nextRoutine = incompleteRoutines.find(({ scheduledMinutes }) => scheduledMinutes > nowMinutes);
+  const currentRoutine = activeRoutine
+    ?? nextRoutine
     ?? incompleteRoutines[0]
     ?? displayedRoutines[0]
     ?? null;
@@ -173,12 +225,17 @@ const MainPage = () => {
     ? Math.round((completedRoutineCount / totalRoutineCount) * 100)
     : 0;
   const isCurrentRoutineTime = currentRoutine
-    ? Math.floor(currentRoutine.scheduledMinutes / 60) === now.getHours()
+    ? currentRoutine.scheduledMinutes <= nowMinutes && nowMinutes < currentRoutine.scheduledMinutes + 60
     : false;
   const isRoutineCompleted = Boolean(currentRoutine?.completed || currentRoutine?.status.includes('완료'));
   const hasTodayRoutines = displayedRoutines.length > 0;
   const hasUnreadNotifications = notifications.some(({ read }) => !read);
 
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -187,7 +244,14 @@ const MainPage = () => {
       setIsLoading(true);
       setErrorMessage('');
       try {
-        const data = await getMainPage();
+        let userId = localStorage.getItem('userId');
+        if (!userId) {
+          const profile = await getMyProfile();
+          userId = profile?.id;
+          if (userId) localStorage.setItem('userId', String(userId));
+        }
+        if (!userId) throw new Error('사용자 정보를 확인할 수 없습니다.');
+        const data = await getMainPage(userId);
         if (isActive) setMainData({ userName: data?.userName ?? '', todayRoutines: data?.todayRoutines ?? [] });
       } catch (error) {
         if (isActive) setErrorMessage(error.message);
@@ -202,10 +266,14 @@ const MainPage = () => {
 
   useEffect(() => {
     let isActive = true;
+    let isRequesting = false;
 
-    const loadNotifications = async () => {
-      setIsNotificationLoading(true);
+    const loadNotifications = async (showLoading = false) => {
+      if (isRequesting) return;
+      isRequesting = true;
+      if (showLoading) setIsNotificationLoading(true);
       setNotificationError('');
+
       try {
         let userId = localStorage.getItem('userId');
         if (!userId) {
@@ -215,17 +283,43 @@ const MainPage = () => {
         }
         if (!userId) throw new Error('사용자 정보를 확인할 수 없습니다.');
         const data = await getTodayNotifications(userId);
-        if (isActive) setNotifications(data?.notifications ?? []);
+        if (isActive) {
+          setNotifications(
+            [...(data?.notifications ?? [])].sort(
+              (first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime(),
+            ),
+          );
+        }
       } catch (error) {
         if (isActive) setNotificationError(error.message);
       } finally {
-        if (isActive) setIsNotificationLoading(false);
+        isRequesting = false;
+        if (isActive && showLoading) setIsNotificationLoading(false);
       }
     };
 
-    loadNotifications();
-    return () => { isActive = false; };
+    const handleFocus = () => loadNotifications();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadNotifications();
+    };
+
+    loadNotifications(true);
+    const intervalId = window.setInterval(() => loadNotifications(), 15000);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
+
+  const handleOpenAiChat = () => {
+    navigate('/aichat');
+  };
 
   const handleCompleteRoutine = async () => {
     if (!currentRoutine || isCompleting) return;
@@ -258,7 +352,24 @@ const MainPage = () => {
       }
     }
     setIsNotificationOpen(false);
-  };  useEffect(() => {
+    setHighlightedRoutineId(notification.routineId);
+    if (notification.routineId !== currentRoutine?.id) {
+      setExpandedRoutineId(notification.routineId);
+    }
+  };
+
+  useEffect(() => {
+    if (!highlightedRoutineId || isNotificationOpen) return undefined;
+    const frameId = window.requestAnimationFrame(() => {
+      document.querySelector(`[data-routine-id="${highlightedRoutineId}"]`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [highlightedRoutineId, isNotificationOpen]);
+
+  useEffect(() => {
     if (!isNotificationOpen) return undefined;
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') setIsNotificationOpen(false);
@@ -339,11 +450,11 @@ const MainPage = () => {
                 <button className="flex min-h-[58px] items-center justify-center gap-2 rounded-full bg-[#f4d15d] px-3 text-[16px] font-bold text-[#37322a] shadow-[0_4px_8px_rgba(178,145,49,0.18)] active:scale-[0.98]" disabled={isCompleting} onClick={handleCompleteRoutine} type="button">
                   <FiCheck className="size-5" strokeWidth={2.5} /> {isCompleting ? '처리 중...' : '완료했어요'}
                 </button>
-                <button className="min-h-[58px] rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" type="button">못 지킬 것 같아요</button>
+                <button className="min-h-[58px] rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={handleOpenAiChat} type="button">못 지킬 것 같아요</button>
               </div>
             ) : (
               <div className="mt-7">
-                <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" type="button">못 지킬 것 같아요</button>
+                <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={handleOpenAiChat} type="button">못 지킬 것 같아요</button>
               </div>
             )
           )}
@@ -356,7 +467,15 @@ const MainPage = () => {
               isExpanded={expandedRoutineId === routine.id}
               isHighlighted={highlightedRoutineId === routine.id}
               key={routine.id}
-              onToggle={() => { setHighlightedRoutineId(null); setExpandedRoutineId((current) => current === routine.id ? null : routine.id); }}
+              onCannotComplete={handleOpenAiChat}
+              onToggle={() => {
+                if (highlightedRoutineId === routine.id) {
+                  setHighlightedRoutineId(null);
+                  setExpandedRoutineId(routine.id);
+                  return;
+                }
+                setExpandedRoutineId((current) => current === routine.id ? null : routine.id);
+              }}
               status={routine.status}
             />
           ))}

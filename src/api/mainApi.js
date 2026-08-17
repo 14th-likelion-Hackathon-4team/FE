@@ -22,7 +22,9 @@ const authenticatedRequest = async (path, options = {}) => {
   return result?.data;
 };
 
-export const getMainPage = () => authenticatedRequest('/api/v1/routinefit/main');
+export const getMainPage = (userId) => authenticatedRequest(
+  `/api/v1/routinefit/main?userId=${encodeURIComponent(userId)}`,
+);
 
 export const completeRoutine = (routineId) => authenticatedRequest(
   `/api/v1/routinefit/routines/${routineId}/complete`,
