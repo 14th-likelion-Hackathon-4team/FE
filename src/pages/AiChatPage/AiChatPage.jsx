@@ -111,7 +111,7 @@ const StepButtons = ({ isLoading = false, isNextDisabled, onBack, onNext }) => (
 const CoachHeader = ({ children }) => (
   <>
     <h1 className="flex h-11 items-center justify-center text-[24px] font-extrabold">AI 코치</h1>
-    <div className="mt-5 flex flex-col items-center">
+    <div className="mt-5 flex w-full flex-col items-center">
       <img alt="AI 코치 햄스터" className="h-[112px] w-auto object-contain" src="/assets/images/hamster.png" />
       {children}
     </div>
@@ -277,7 +277,14 @@ const AiChatPage = () => {
 
       {screen === 'select' && (
         <div className="mx-auto flex w-full max-w-[390px] flex-col px-1 pb-8 pt-5">
-          <CoachHeader><p className="mt-3 text-center text-[20px] font-semibold leading-[1.35]">안녕하세요, {userName || '회원'}님! 👋<br />무엇을 도와드릴까요?</p></CoachHeader>
+          <CoachHeader>
+            <p className="mt-4 flex w-full flex-col items-center gap-1 px-3 text-center text-[20px] font-semibold leading-[1.35] tracking-[-0.025em]">
+              <span className="whitespace-nowrap">
+                안녕하세요, {userName || '회원'}님! <span aria-hidden="true">👋</span>
+              </span>
+              <span>무엇을 도와드릴까요?</span>
+            </p>
+          </CoachHeader>
           <p className="mb-3 mt-8 text-[14px] font-medium text-[#8a8a8a]">상담할 루틴을 선택해주세요</p>
           <div className="ai-select-items flex flex-col gap-3">
             {routines.length === 0 && <p className="py-14 text-center text-[16px] text-[#888]">현재 등록된 루틴이 없습니다.</p>}
