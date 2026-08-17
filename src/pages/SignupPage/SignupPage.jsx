@@ -17,9 +17,7 @@ const SignupPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNickname, setSuccessNickname] = useState('');
 
-  // 'available' | 'unavailable' | null
-  const [idCheckResult, setIdCheckResult] = useState(null);
-  const [checkedUserId, setCheckedUserId] = useState('');
+  const [idCheckStatus, setIdCheckStatus] = useState('idle');
 
   const specialCharRegex = /[^a-zA-Z0-9]/;
   const hasIdError = userId.length > 0 && specialCharRegex.test(userId);
@@ -29,31 +27,23 @@ const SignupPage = () => {
   const hasConfirmPasswordError = confirmPassword.length > 0 && confirmPassword !== password;
   const hasNicknameError = nickname.length > 20;
 
-  const isChecking = Boolean(userId) && !hasIdError && checkedUserId !== userId;
-  const effectiveIdCheckStatus = !userId || hasIdError
-    ? 'idle'
-    : isChecking
-      ? 'checking'
-      : (idCheckResult ?? 'idle');
-
-  // 아이디 중복확인 (디바운스 500ms)
   useEffect(() => {
     if (!userId || hasIdError) {
       return;
     }
 
-    const timer = setTimeout(() => {
-      fetch(`${BASE_URL}/api/v1/routinefit/auth/check-id?loginId=${encodeURIComponent(userId)}`)
-        .then((res) => res.json())
-        .then((result) => {
-          setIdCheckResult(result.data.available ? 'available' : 'unavailable');
-          setCheckedUserId(userId);
-        })
-        .catch(() => {
-          setIdCheckResult(null);
-          setCheckedUserId(userId);
-        });
-    }, 500);
+    const timer = setTimeout(async () => {
+      setIdCheckStatus('checking');
+      try {
+        const response = await fetch(
+          `${BASE_URL}/api/v1/routinefit/auth/check-id?loginId=${encodeURIComponent(userId)}`,
+        );
+        const result = await response.json();
+        setIdCheckStatus(result.data.available ? 'available' : 'unavailable');
+      } catch {
+        setIdCheckStatus('idle');
+      }
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [userId, hasIdError]);
@@ -71,7 +61,7 @@ const SignupPage = () => {
       return;
     }
 
-    if (effectiveIdCheckStatus !== 'available') {
+    if (idCheckStatus !== 'available') {
       setSignupError('아이디 중복확인을 완료해주세요.');
       return;
     }
@@ -80,7 +70,7 @@ const SignupPage = () => {
     setSignupError('');
 
     try {
-      const response = await fetch(`${BASE_URL}/api/v1/routinefit/auth/signup`, {
+      const signupResponse = await fetch(`${BASE_URL}/api/v1/routinefit/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -90,17 +80,32 @@ const SignupPage = () => {
         }),
       });
 
-      const result = await response.json();
+      const signupResult = await signupResponse.json();
 
-      if (!response.ok) {
-        if (response.status === 409) {
-          setIdCheckResult('unavailable');
-          setCheckedUserId(userId);
+      if (!signupResponse.ok) {
+        if (signupResponse.status === 409) {
+          setIdCheckStatus('unavailable');
         }
-        throw new Error(result.message || '회원가입에 실패했습니다. 다시 시도해주세요.');
+        throw new Error(signupResult.message || '회원가입에 실패했습니다. 다시 시도해주세요.');
       }
 
-      setSuccessNickname(result.data.nickname);
+      const loginResponse = await fetch(`${BASE_URL}/api/v1/routinefit/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loginId: userId,
+          password,
+        }),
+      });
+
+      const loginResult = await loginResponse.json();
+
+      if (loginResponse.ok) {
+        localStorage.setItem('accessToken', loginResult.data.accessToken);
+        localStorage.setItem('refreshToken', loginResult.data.refreshToken);
+      }
+
+      setSuccessNickname(signupResult.data.nickname);
       setIsSignedUp(true);
     } catch (err) {
       setSignupError(err.message);
@@ -200,7 +205,7 @@ const SignupPage = () => {
           </div>
           <input
             className={`h-[48px] w-full rounded-xl border px-4 text-[14px] font-normal text-text-main placeholder:text-[14px] placeholder:font-normal placeholder:text-[#8A8A8A] focus:outline-none ${
-              hasIdError || effectiveIdCheckStatus === 'unavailable'
+              hasIdError || idCheckStatus === 'unavailable'
                 ? 'border-[#D50505] bg-[#FFE8EB]'
                 : 'border-primary-soft bg-surface focus:border-primary'
             }`}
@@ -213,13 +218,13 @@ const SignupPage = () => {
           {hasIdError && (
             <p className="text-[12px] font-medium text-[#D50505]">특수문자는 사용할 수 없습니다</p>
           )}
-          {!hasIdError && effectiveIdCheckStatus === 'checking' && (
+          {!hasIdError && userId && idCheckStatus === 'checking' && (
             <p className="text-[12px] font-medium text-text-muted">확인 중...</p>
           )}
-          {!hasIdError && effectiveIdCheckStatus === 'available' && (
+          {!hasIdError && userId && idCheckStatus === 'available' && (
             <p className="text-[12px] font-medium text-[#4F8C5B]">✓ 사용 가능한 아이디에요</p>
           )}
-          {!hasIdError && effectiveIdCheckStatus === 'unavailable' && (
+          {!hasIdError && userId && idCheckStatus === 'unavailable' && (
             <p className="text-[12px] font-medium text-[#D50505]">이미 사용 중인 아이디입니다</p>
           )}
         </div>
