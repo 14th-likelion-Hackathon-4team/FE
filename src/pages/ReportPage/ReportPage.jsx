@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import axios from 'axios';
+import { useEffect, useState } from 'react';
 import DailyReport from './components/DailyReport';
 import ReportCalendar from './components/ReportCalendar';
 import WeeklyReport from './components/WeeklyReport';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const calendarStatusByDate = {
   '2026-07-27': 'completed',
@@ -99,6 +102,57 @@ const ReportPage = () => {
   const [selectedDate, setSelectedDate] = useState('2026-08-01');
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [appliedSuggestionId, setAppliedSuggestionId] = useState(null);
+  const [userId, setUserId] = useState(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchCurrentUser = async () => {
+      const accessToken = localStorage.getItem('accessToken');
+      console.log('[ReportPage] accessToken 확인:', accessToken ? '있음' : '없음');
+
+      if (!accessToken) {
+        console.error('[ReportPage] 로그인 정보가 없어 /users/me 요청을 중단합니다.');
+        return;
+      }
+
+      try {
+        const response = await axios.get(`${BASE_URL}/api/v1/routinefit/users/me`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          signal: controller.signal,
+        });
+        const currentUserId = response.data?.data?.id;
+
+        console.log('[ReportPage] /users/me 응답:', response.data);
+
+        if (typeof currentUserId !== 'number') {
+          console.error('[ReportPage] /users/me 응답에서 userId를 찾지 못했습니다.');
+          return;
+        }
+
+        setUserId(currentUserId);
+      } catch (error) {
+        if (axios.isCancel(error)) return;
+
+        console.error(
+          '[ReportPage] /users/me 조회 실패:',
+          error.response?.data ?? error.message,
+        );
+      }
+    };
+
+    fetchCurrentUser();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (userId !== null) {
+      console.log('[ReportPage] 현재 사용자 userId:', userId);
+    }
+  }, [userId]);
 
   const currentSuggestion = suggestions[suggestionIndex];
   const selectedReport = createDailyReport(selectedDate);
