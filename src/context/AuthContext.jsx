@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 기존 context와 provider 공개 API를 유지한다. */
 import { createContext, useState } from 'react';
 
 export const AuthContext = createContext(null);
