@@ -10,10 +10,10 @@ const toCalendarStatusByDate = (history) =>
   Object.fromEntries(
     history.map((report) => [
       report.date,
-      report.completionRate === 100
-        ? "completed"
-        : report.alternativeMissionCount > 0
-          ? "alternative"
+      report.alternativeMissionCount > 0
+        ? "alternative"
+        : report.completionRate === 100
+          ? "completed"
           : "incomplete",
     ]),
   );
@@ -45,13 +45,14 @@ const formatKoreanDate = (dateId) => {
 
 const createDailyReport = (report, dateId) => {
   const totalCount = report?.totalRoutineCount ?? 0;
-  const planCount = report?.completedRoutineCount ?? 0;
+  const completedCount = report?.completedRoutineCount ?? 0;
   const alternativeCount = report?.alternativeMissionCount ?? 0;
-  const incompleteCount = Math.max(totalCount - planCount - alternativeCount, 0);
+  const planCount = Math.max(completedCount - alternativeCount, 0);
+  const incompleteCount = Math.max(totalCount - completedCount, 0);
 
   return {
     dateLabel: formatKoreanDate(report?.date ?? dateId),
-    completedCount: planCount + alternativeCount,
+    completedCount,
     counts: {
       plan: planCount,
       alternative: alternativeCount,
