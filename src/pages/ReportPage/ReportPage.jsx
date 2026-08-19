@@ -79,23 +79,18 @@ const createDailyReport = (report, dateId) => {
   };
 };
 
-const weeklySummary = {
-  completionRate: 71,
-  change: "+8%",
-  dateRange: "7/27 – 8/2",
-  planRate: 54,
-  alternativeRate: 17,
+const formatShortDate = (dateId) => {
+  if (!dateId) return "";
+  const [, month, day] = dateId.split("-").map(Number);
+  return `${month}/${day}`;
 };
 
-const weekdayRates = [
-  { weekday: "월", rate: 100 },
-  { weekday: "화", rate: 16 },
-  { weekday: "수", rate: 40 },
-  { weekday: "목", rate: 100 },
-  { weekday: "금", rate: 16 },
-  { weekday: "토", rate: 69 },
-  { weekday: "일", rate: 40 },
-];
+const getWeekdayLabel = (dateId) => {
+  const [year, month, day] = dateId.split("-").map(Number);
+  return ["일", "월", "화", "수", "목", "금", "토"][
+    new Date(year, month - 1, day).getDay()
+  ];
+};
 
 const causeTags = [
   { label: "약속", count: 5, tone: "success" },
@@ -129,6 +124,7 @@ const ReportPage = () => {
   const [reportHistory, setReportHistory] = useState([]);
   const [streak, setStreak] = useState({ currentStreak: 0, maxStreak: 0 });
   const [dailyReport, setDailyReport] = useState(null);
+  const [weeklyReport, setWeeklyReport] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -276,9 +272,73 @@ const ReportPage = () => {
     fetchDailyReport();
   }, [selectedDate, userId]);
 
+  useEffect(() => {
+    if (userId === null) return;
+
+    const fetchWeeklyReport = async () => {
+      const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) return;
+
+      try {
+        const response = await axios.get(
+          `${BASE_URL}/api/v1/routinefit/reports/weekly`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            params: { userId, date: selectedDate },
+          },
+        );
+
+        setWeeklyReport(response.data?.data ?? null);
+      } catch (error) {
+        setWeeklyReport(null);
+        console.error(
+          "[ReportPage] 주간 리포트 조회 실패:",
+          error.response?.data ?? error.message,
+        );
+      }
+    };
+
+    fetchWeeklyReport();
+  }, [selectedDate, userId]);
+
   const currentSuggestion = suggestions[suggestionIndex];
   const selectedReport = createDailyReport(dailyReport, selectedDate);
   const calendarStatusByDate = toCalendarStatusByDate(reportHistory);
+  const weeklyTotalCount = weeklyReport?.totalRoutineCount ?? 0;
+  const weeklyAlternativeCount = reportHistory
+    .filter(
+      (report) =>
+        weeklyReport?.startDate &&
+        weeklyReport?.endDate &&
+        report.date >= weeklyReport.startDate &&
+        report.date <= weeklyReport.endDate,
+    )
+    .reduce((sum, report) => sum + report.alternativeMissionCount, 0);
+  const weeklySummary = {
+    completionRate: weeklyReport?.completionRate ?? 0,
+    change: "—",
+    dateRange: weeklyReport
+      ? `${formatShortDate(weeklyReport.startDate)} – ${formatShortDate(weeklyReport.endDate)}`
+      : "",
+    planRate:
+      weeklyTotalCount > 0
+        ? Math.round(
+            ((weeklyReport?.completedRoutineCount ?? 0) / weeklyTotalCount) * 100,
+          )
+        : 0,
+    alternativeRate:
+      weeklyTotalCount > 0
+        ? Math.round((weeklyAlternativeCount / weeklyTotalCount) * 100)
+        : 0,
+  };
+  const weekdayRates = Array.isArray(weeklyReport?.dailyReports)
+    ? weeklyReport.dailyReports.map((report) => ({
+        weekday: getWeekdayLabel(report.date),
+        rate: report.completionRate,
+      }))
+    : [];
 
   const handleNextSuggestion = () => {
     setSuggestionIndex(
