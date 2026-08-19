@@ -245,18 +245,28 @@ const ReportPage = () => {
   useEffect(() => {
     if (userId === null) return;
 
+    const historyReport = reportHistory.find(
+      (report) => report.date === selectedDate,
+    );
+    const shouldFetchDetail =
+      selectedDate !== TODAY_DATE && historyReport?.reportId != null;
+
     const fetchDailyReport = async () => {
       const accessToken = localStorage.getItem("accessToken");
       if (!accessToken) return;
 
       try {
         const response = await axios.get(
-          `${BASE_URL}/api/v1/routinefit/reports/daily`,
+          shouldFetchDetail
+            ? `${BASE_URL}/api/v1/routinefit/reports/${historyReport.reportId}`
+            : `${BASE_URL}/api/v1/routinefit/reports/daily`,
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,
             },
-            params: { userId, date: selectedDate },
+            params: shouldFetchDetail
+              ? { userId }
+              : { userId, date: selectedDate },
           },
         );
 
@@ -264,14 +274,14 @@ const ReportPage = () => {
       } catch (error) {
         setDailyReport(null);
         console.error(
-          "[ReportPage] 일간 리포트 조회 실패:",
+          "[ReportPage] 리포트 조회 실패:",
           error.response?.data ?? error.message,
         );
       }
     };
 
     fetchDailyReport();
-  }, [selectedDate, userId]);
+  }, [reportHistory, selectedDate, userId]);
 
   useEffect(() => {
     if (userId === null) return;
