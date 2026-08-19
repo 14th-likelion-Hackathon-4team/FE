@@ -18,17 +18,14 @@ const toCalendarStatusByDate = (history) =>
     ]),
   );
 
-const routines = [
-  { id: 1, name: "루틴명 텍스트", status: "done" },
-  { id: 2, name: "루틴명 텍스트", status: "done" },
-  {
-    id: 3,
-    name: "루틴명 텍스트",
-    description: "대체 미션 · 대체 행동 텍스트",
-    status: "alternative",
-  },
-  { id: 4, name: "루틴명 텍스트", status: "incomplete" },
-];
+const toDateId = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const TODAY_DATE = toDateId(new Date());
 
 const formatKoreanDate = (dateId) => {
   const [year, month, day] = dateId.split("-").map(Number);
@@ -46,14 +43,41 @@ const formatKoreanDate = (dateId) => {
   return `${month}월 ${day}일 ${weekday}`;
 };
 
-const createDailyReport = (dateId) => ({
-  dateLabel: formatKoreanDate(dateId),
-  completedCount: 3,
-  counts: { plan: 1, alternative: 1, incomplete: 1 },
-  progress: { plan: 33.33, alternative: 33.33 },
-  routines,
-  feedback: "계획과 달랐지만 대체 미션까지 완료했어요 👏",
-});
+const createDailyReport = (report, dateId) => {
+  const totalCount = report?.totalRoutineCount ?? 0;
+  const planCount = report?.completedRoutineCount ?? 0;
+  const alternativeCount = report?.alternativeMissionCount ?? 0;
+  const incompleteCount = Math.max(totalCount - planCount - alternativeCount, 0);
+
+  return {
+    dateLabel: formatKoreanDate(report?.date ?? dateId),
+    completedCount: planCount + alternativeCount,
+    counts: {
+      plan: planCount,
+      alternative: alternativeCount,
+      incomplete: incompleteCount,
+    },
+    progress: {
+      plan: totalCount > 0 ? (planCount / totalCount) * 100 : 0,
+      alternative: totalCount > 0 ? (alternativeCount / totalCount) * 100 : 0,
+    },
+    routines: Array.isArray(report?.routines)
+      ? report.routines.map((routine) => ({
+          id: routine.routineId,
+          name: routine.title,
+          status: routine.completed ? "done" : "incomplete",
+        }))
+      : [],
+    feedback:
+      totalCount === 0
+        ? "등록된 루틴이 없어요."
+        : planCount + alternativeCount === totalCount
+          ? "오늘 루틴을 모두 완료했어요 👏"
+          : alternativeCount > 0
+            ? "계획과 달랐지만 대체 미션까지 완료했어요 👏"
+            : `오늘 ${planCount}개의 루틴을 완료했어요.`,
+  };
+};
 
 const weeklySummary = {
   completionRate: 71,
@@ -98,12 +122,13 @@ const suggestions = [
 ];
 
 const ReportPage = () => {
-  const [selectedDate, setSelectedDate] = useState("2026-08-01");
+  const [selectedDate, setSelectedDate] = useState(TODAY_DATE);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [appliedSuggestionId, setAppliedSuggestionId] = useState(null);
   const [userId, setUserId] = useState(null);
   const [reportHistory, setReportHistory] = useState([]);
   const [streak, setStreak] = useState({ currentStreak: 0, maxStreak: 0 });
+  const [dailyReport, setDailyReport] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -220,8 +245,39 @@ const ReportPage = () => {
     fetchStreak();
   }, [userId]);
 
+  useEffect(() => {
+    if (userId === null) return;
+
+    const fetchDailyReport = async () => {
+      const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) return;
+
+      try {
+        const response = await axios.get(
+          `${BASE_URL}/api/v1/routinefit/reports/daily`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            params: { userId, date: selectedDate },
+          },
+        );
+
+        setDailyReport(response.data?.data ?? null);
+      } catch (error) {
+        setDailyReport(null);
+        console.error(
+          "[ReportPage] 일간 리포트 조회 실패:",
+          error.response?.data ?? error.message,
+        );
+      }
+    };
+
+    fetchDailyReport();
+  }, [selectedDate, userId]);
+
   const currentSuggestion = suggestions[suggestionIndex];
-  const selectedReport = createDailyReport(selectedDate);
+  const selectedReport = createDailyReport(dailyReport, selectedDate);
   const calendarStatusByDate = toCalendarStatusByDate(reportHistory);
 
   const handleNextSuggestion = () => {
@@ -238,7 +294,7 @@ const ReportPage = () => {
         onSelectDate={setSelectedDate}
         selectedDate={selectedDate}
         statusByDate={calendarStatusByDate}
-        todayDate="2026-08-02"
+        todayDate={TODAY_DATE}
       />
       <DailyReport report={selectedReport} />
       <WeeklyReport
