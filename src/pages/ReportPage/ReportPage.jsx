@@ -103,6 +103,7 @@ const ReportPage = () => {
   const [appliedSuggestionId, setAppliedSuggestionId] = useState(null);
   const [userId, setUserId] = useState(null);
   const [reportHistory, setReportHistory] = useState([]);
+  const [streak, setStreak] = useState({ currentStreak: 0, maxStreak: 0 });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -185,6 +186,40 @@ const ReportPage = () => {
     fetchReportHistory();
   }, [userId]);
 
+  useEffect(() => {
+    if (userId === null) return;
+
+    const fetchStreak = async () => {
+      const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) return;
+
+      try {
+        const response = await axios.get(
+          `${BASE_URL}/api/v1/routinefit/reports/streak`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            params: { userId },
+          },
+        );
+        const streakData = response.data?.data;
+
+        setStreak({
+          currentStreak: streakData?.currentStreak ?? 0,
+          maxStreak: streakData?.maxStreak ?? 0,
+        });
+      } catch (error) {
+        console.error(
+          "[ReportPage] 연속 기록 조회 실패:",
+          error.response?.data ?? error.message,
+        );
+      }
+    };
+
+    fetchStreak();
+  }, [userId]);
+
   const currentSuggestion = suggestions[suggestionIndex];
   const selectedReport = createDailyReport(selectedDate);
   const calendarStatusByDate = toCalendarStatusByDate(reportHistory);
@@ -198,8 +233,8 @@ const ReportPage = () => {
   return (
     <div className="-mx-[3px] w-[calc(100%+6px)] max-w-[402px] self-start pb-10">
       <ReportCalendar
-        bestStreak={12}
-        currentStreak={4}
+        bestStreak={streak.maxStreak}
+        currentStreak={streak.currentStreak}
         onSelectDate={setSelectedDate}
         selectedDate={selectedDate}
         statusByDate={calendarStatusByDate}
