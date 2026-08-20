@@ -47,6 +47,7 @@ const LoginPage = () => {
 
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('userId', String(user.id));
 
       setNickname(user.nickname);
       setIsLoggedIn(true);

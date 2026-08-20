@@ -25,6 +25,7 @@ const Mypage = () => {
 
   const [view, setView] = useState('main');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPasswordChangedModal, setShowPasswordChangedModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -44,12 +45,17 @@ const Mypage = () => {
   const [missionReminder, setMissionReminder] = useState(false);
   const [alarmTone, setAlarmTone] = useState('차분한벨');
   const [alarmTime, setAlarmTime] = useState('1시간전');
-  const [customAlarmHours, setCustomAlarmHours] = useState('');
+  const [customAlarmMinutes, setCustomAlarmMinutes] = useState('');
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+  const [notificationErrorMessage, setNotificationErrorMessage] = useState('');
 
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const NICKNAME_MAX_LENGTH = 50;
+  const PASSWORD_MIN_LENGTH = 8;
+  const PASSWORD_MAX_LENGTH = 72;
 
   useEffect(() => {
     const fetchMyInfo = async () => {
@@ -87,7 +93,7 @@ const Mypage = () => {
         setAlarmTone(result.data.alarmSound);
         setAlarmTime(result.data.alarmOffsetType);
         if (result.data.alarmOffsetType === '직접설정' && result.data.alarmOffsetMinutes) {
-          setCustomAlarmHours(String(result.data.alarmOffsetMinutes));
+          setCustomAlarmMinutes(String(result.data.alarmOffsetMinutes));
         }
       } catch (err) {
         setLoadError(err.message);
@@ -109,8 +115,8 @@ const Mypage = () => {
         method: 'POST',
         headers: authHeaders(),
       });
-    } catch (err) {
-      console.warn('로그아웃 API 호출 실패:', err);
+    } catch {
+      // 로그아웃 API 실패해도 클라이언트에서는 토큰 정리하고 이동
     } finally {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
@@ -123,11 +129,24 @@ const Mypage = () => {
     setEditNicknameError('');
     setPasswordError('');
 
+    if (editNickname.length > NICKNAME_MAX_LENGTH) {
+      setEditNicknameError(`닉네임은 ${NICKNAME_MAX_LENGTH}자 이내로 입력해주세요.`);
+      return;
+    }
+
     const wantsPasswordChange = currentPassword || newPassword || confirmNewPassword;
 
-    if (wantsPasswordChange && newPassword !== confirmNewPassword) {
-      setPasswordError('새 비밀번호가 일치하지 않습니다.');
-      return;
+    if (wantsPasswordChange) {
+      if (newPassword.length < PASSWORD_MIN_LENGTH || newPassword.length > PASSWORD_MAX_LENGTH) {
+        setPasswordError(
+          `비밀번호는 ${PASSWORD_MIN_LENGTH}자 이상 ${PASSWORD_MAX_LENGTH}자 이하로 입력해주세요.`,
+        );
+        return;
+      }
+      if (newPassword !== confirmNewPassword) {
+        setPasswordError('새 비밀번호가 일치하지 않습니다.');
+        return;
+      }
     }
 
     setIsSavingProfile(true);
@@ -170,9 +189,11 @@ const Mypage = () => {
           throw new Error(result.message || '비밀번호 변경에 실패했습니다.');
         }
 
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmNewPassword('');
+        // 비밀번호 변경 성공 시 강제 로그아웃 처리
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        setShowPasswordChangedModal(true);
+        return;
       }
 
       setView('main');
@@ -185,6 +206,7 @@ const Mypage = () => {
 
   const handleSaveNotifications = async (e) => {
     e.preventDefault();
+    setNotificationErrorMessage('');
     setIsSavingNotifications(true);
 
     try {
@@ -199,19 +221,22 @@ const Mypage = () => {
             alarmSound: alarmTone,
             alarmOffsetType: alarmTime,
             alarmOffsetMinutes:
-              alarmTime === '직접설정' ? Number(customAlarmHours) * 60 : null,
+              alarmTime === '직접설정' && customAlarmMinutes
+                ? Number(customAlarmMinutes)
+                : null,
           }),
         },
       );
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || '알림 설정 저장에 실패했습니다.');
+        setNotificationErrorMessage(result.message || '알림 설정 저장에 실패했습니다.');
+        return;
       }
 
       setView('main');
     } catch (err) {
-      alert(err.message);
+      setNotificationErrorMessage(err.message);
     } finally {
       setIsSavingNotifications(false);
     }
@@ -293,6 +318,7 @@ const Mypage = () => {
             <input
               className="h-[48px] w-full rounded-xl border border-primary-soft bg-surface px-4 text-[14px] font-normal text-text-main focus:border-primary focus:outline-none"
               id="editNickname"
+              maxLength={NICKNAME_MAX_LENGTH}
               onChange={(e) => setEditNickname(e.target.value)}
               type="text"
               value={editNickname}
@@ -340,6 +366,7 @@ const Mypage = () => {
               <input
                 className="h-[48px] w-full rounded-xl border border-primary-soft bg-surface px-4 pr-11 text-[14px] font-normal text-text-main placeholder:text-[14px] placeholder:font-normal placeholder:text-[#8A8A8A] focus:border-primary focus:outline-none"
                 id="newPassword"
+                maxLength={PASSWORD_MAX_LENGTH}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="영문 + 숫자 8자 이상"
                 type={showNewPassword ? 'text' : 'password'}
@@ -368,6 +395,7 @@ const Mypage = () => {
               <input
                 className="h-[48px] w-full rounded-xl border border-primary-soft bg-surface px-4 pr-11 text-[14px] font-normal text-text-main placeholder:text-[14px] placeholder:font-normal placeholder:text-[#8A8A8A] focus:border-primary focus:outline-none"
                 id="confirmNewPassword"
+                maxLength={PASSWORD_MAX_LENGTH}
                 onChange={(e) => setConfirmNewPassword(e.target.value)}
                 placeholder="한 번 더 입력"
                 type={showConfirmNewPassword ? 'text' : 'password'}
@@ -400,6 +428,28 @@ const Mypage = () => {
             {isSavingProfile ? '저장 중...' : '저장하기'}
           </button>
         </form>
+
+        {showPasswordChangedModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-[clamp(18px,5vw,40px)]">
+            <div className="flex w-full max-w-[320px] flex-col items-center gap-4 rounded-3xl bg-background p-6 text-center">
+              <h2 className="text-[24px] font-extrabold text-[#2C2C2C]">Routine Fit</h2>
+              <span className="text-[28px]">🔒</span>
+              <p className="text-[16px] font-semibold text-[#2C2C2C]">비밀번호가 변경되었습니다</p>
+              <p className="text-[12px] font-normal text-text-muted">
+                보안을 위해 로그아웃되었습니다.
+                <br />
+                새 비밀번호로 다시 로그인해주세요.
+              </p>
+              <button
+                className="mt-2 h-[48px] w-full rounded-xl bg-primary text-[14px] font-semibold text-[#2C2C2C]"
+                onClick={() => navigate('/login')}
+                type="button"
+              >
+                로그인하러 가기
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -500,14 +550,14 @@ const Mypage = () => {
               <div className="mt-1 flex items-center gap-2">
                 <input
                   className="h-[44px] w-[100px] rounded-xl border border-primary-soft bg-surface px-3 text-[14px] font-normal text-text-main focus:border-primary focus:outline-none"
-                  max="24"
+                  max="1440"
                   min="1"
-                  onChange={(e) => setCustomAlarmHours(e.target.value)}
+                  onChange={(e) => setCustomAlarmMinutes(e.target.value)}
                   placeholder="숫자 입력"
                   type="number"
-                  value={customAlarmHours}
+                  value={customAlarmMinutes}
                 />
-                <span className="text-[14px] font-normal text-[#2C2C2C]">시간 전</span>
+                <span className="text-[14px] font-normal text-[#2C2C2C]">분 전</span>
               </div>
             )}
           </div>
@@ -520,6 +570,24 @@ const Mypage = () => {
             {isSavingNotifications ? '저장 중...' : '저장하기'}
           </button>
         </form>
+
+        {notificationErrorMessage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-[clamp(18px,5vw,40px)]">
+            <div className="flex w-full max-w-[320px] flex-col items-center gap-4 rounded-3xl bg-background p-6 text-center">
+              <h2 className="text-[24px] font-extrabold text-[#2C2C2C]">Routine Fit</h2>
+              <span className="text-[28px]">⚠️</span>
+              <p className="text-[16px] font-semibold text-[#2C2C2C]">알림 설정을 저장하지 못했어요</p>
+              <p className="text-[12px] font-normal text-text-muted">{notificationErrorMessage}</p>
+              <button
+                className="mt-2 h-[48px] w-full rounded-xl bg-primary text-[14px] font-semibold text-[#2C2C2C]"
+                onClick={() => setNotificationErrorMessage('')}
+                type="button"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
