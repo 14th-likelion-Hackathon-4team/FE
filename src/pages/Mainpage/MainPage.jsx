@@ -1,31 +1,78 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { FiBell, FiCheck, FiChevronRight, FiDroplet, FiHeart, FiSmile, FiX } from 'react-icons/fi';
-import { LuDumbbell } from 'react-icons/lu';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  FiBell,
+  FiBookOpen,
+  FiCheck,
+  FiChevronRight,
+  FiDroplet,
+  FiHeart,
+  FiHome,
+  FiMoon,
+  FiSmile,
+  FiSun,
+  FiX,
+} from 'react-icons/fi';
+import { LuCoffee, LuCookie, LuDumbbell, LuFootprints, LuUtensils } from 'react-icons/lu';
+import { completeRoutine, getMainPage, getMyProfile, getTodayNotifications, readNotification } from '@/api/mainApi';
 
-const mockUser = { nickname: '00' };
+const parseScheduledTime = (scheduledTime) => {
+  if (!scheduledTime) return { hour: 0, minute: 0, isValid: false };
 
-const routines = [
-  { id: 'morning-meal', title: '아침 식단', time: '08:00', status: '완료', tone: 'green', icon: FiSmile },
-  { id: 'water', title: '물 2L 마시기', time: '13:00', status: '대체 미션 완료', tone: 'blue', icon: FiDroplet },
-  { id: 'evening-meal', title: '저녁 식단', time: '21:00', status: '대기', tone: 'green', icon: FiSmile },
-  { id: 'skin-care', title: '스킨 케어', time: '23:00', status: '대기', tone: 'red', icon: FiHeart },
-];
-const currentRoutine = {
-  id: 'evening-exercise',
-  title: '저녁 운동',
-  time: '19:00',
-  status: 'IN_PROGRESS',
+  if (typeof scheduledTime === 'string') {
+    const [hour, minute] = scheduledTime.split(':').map(Number);
+    return {
+      hour: Number.isFinite(hour) ? hour : 0,
+      minute: Number.isFinite(minute) ? minute : 0,
+      isValid: Number.isFinite(hour) && Number.isFinite(minute),
+    };
+  }
+
+  const hour = Number(scheduledTime.hour);
+  const minute = Number(scheduledTime.minute);
+  return {
+    hour: Number.isFinite(hour) ? hour : 0,
+    minute: Number.isFinite(minute) ? minute : 0,
+    isValid: Number.isFinite(hour) && Number.isFinite(minute),
+  };
 };
 
-const notifications = [
-  { id: 2, time: '6시간 전', routineId: 'water' },
-  { id: 1, time: '11시간 전', routineId: 'morning-meal' },
-];
+const formatScheduledTime = (scheduledTime) => {
+  const { hour, minute, isValid } = parseScheduledTime(scheduledTime);
+  if (!isValid) return '--:--';
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+};
 
-const getRoutineTitle = (routineId) =>
-  [...(currentRoutine ? [currentRoutine] : []), ...routines].find(({ id }) => id === routineId)?.title ?? '루틴';
+const getRoutineVisual = (routineName = '') => {
+  const normalizedName = routineName.trim();
 
+  if (/물|수분|음수/.test(normalizedName)) return { tone: 'blue', icon: FiDroplet };
+  if (/산책|걷기|걸음|러닝|달리기|조깅/.test(normalizedName)) return { tone: 'yellow', icon: LuFootprints };
+  if (/운동|스트레칭|헬스|요가|필라테스/.test(normalizedName)) return { tone: 'yellow', icon: LuDumbbell };
+  if (/공부|독서|책|과제|학습/.test(normalizedName)) return { tone: 'blue', icon: FiBookOpen };
+  if (/기상|일어나/.test(normalizedName)) return { tone: 'yellow', icon: FiSun };
+  if (/수면|잠|취침|낮잠/.test(normalizedName)) return { tone: 'yellow', icon: FiMoon };
+  if (/청소|정리|집안일|설거지/.test(normalizedName)) return { tone: 'green', icon: FiHome };
+  if (/스킨|약|복용|영양제|케어|양치|세안|샤워/.test(normalizedName)) return { tone: 'red', icon: FiHeart };
+  if (/간식|과자|디저트|야식/.test(normalizedName)) return { tone: 'yellow', icon: LuCookie };
+  if (/커피|카페인|차 마시|티타임/.test(normalizedName)) return { tone: 'red', icon: LuCoffee };
+  if (/식사|식단|아침|점심|저녁|밥/.test(normalizedName)) return { tone: 'green', icon: LuUtensils };
+  return { tone: 'green', icon: FiSmile };
+};
+
+const normalizeRoutine = (routine) => {
+  const { hour, minute } = parseScheduledTime(routine.scheduledTime);
+
+  return {
+    id: routine.routineId,
+    title: routine.routineName,
+    time: formatScheduledTime(routine.scheduledTime),
+    scheduledMinutes: hour * 60 + minute,
+    status: routine.completed ? '완료' : '대기',
+    completed: Boolean(routine.completed),
+    ...getRoutineVisual(routine.routineName),
+  };
+};
 const toneStyles = {
   green: { icon: 'bg-[#d9f2d5] text-[#67bb82]', status: 'bg-[#d9f2d5] text-[#64a56e]' },
   blue: { icon: 'bg-[#dcebff] text-[#7baded]', status: 'bg-[#dceaff] text-[#6994cc]' },
@@ -33,7 +80,7 @@ const toneStyles = {
   yellow: { icon: 'bg-[#fff5c7] text-[#8b78f2]', status: 'bg-[#ececec] text-[#777]' },
 };
 
-const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = false, onToggle, status, time, title, tone }) => {
+const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = false, onCannotComplete, onToggle, status, time, title, tone }) => {
   const styles = toneStyles[tone];
   const isCompleted = status.includes('완료');
   const statusStyle = isMissed || status === '미완료'
@@ -67,7 +114,7 @@ const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = fal
         </button>
         {!isCompleted && !isMissed && (
           <div className="mt-7">
-            <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" type="button">못 지킬 것 같아요</button>
+            <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={onCannotComplete} type="button">못 지킬 것 같아요</button>
           </div>
         )}
       </article>
@@ -87,7 +134,15 @@ const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = fal
     </button>
   );
 };
-const NotificationPanel = ({ onClose, onSelect, unreadNotificationIds }) => (
+const formatRelativeTime = (createdAt) => {
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000));
+  if (elapsedMinutes < 1) return '지금';
+  if (elapsedMinutes < 60) return `${elapsedMinutes}분 전`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  return elapsedHours < 24 ? `${elapsedHours}시간 전` : `${Math.floor(elapsedHours / 24)}일 전`;
+};
+
+const NotificationPanel = ({ errorMessage, isLoading, notifications, onClose, onSelect }) => (
   <>
     <button aria-label="알림창 닫기" className="notification-backdrop fixed inset-x-0 bottom-[82px] top-0 z-40 cursor-default bg-black/25" onClick={onClose} type="button" />
     <section aria-labelledby="notification-title" aria-modal="true" className="notification-sheet fixed inset-x-0 bottom-[82px] z-[60] mx-auto h-[calc(71dvh-82px)] min-h-[500px] max-w-[600px] overflow-y-auto rounded-t-[42px] bg-[#fffefb] px-6 pb-8 pt-7 shadow-[0_-4px_18px_rgba(0,0,0,0.05)]" role="dialog">
@@ -97,26 +152,48 @@ const NotificationPanel = ({ onClose, onSelect, unreadNotificationIds }) => (
         </button>
         <h2 className="text-[24px] font-extrabold tracking-[-0.04em] text-[#111]" id="notification-title">알림</h2>
       </div>
-      <ul>
-        {notifications.map((notification) => (
-          <li className="border-b border-[#d1d1d1]" key={notification.id}>
-            <button className="grid min-h-[90px] w-full grid-cols-[20px_minmax(0,1fr)_72px_16px] items-center gap-3 px-2 text-left hover:bg-[#faf8f2] focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onSelect(notification)} type="button">
-              <span aria-hidden="true" className={`size-5 shrink-0 rounded-full ${unreadNotificationIds.includes(notification.id) ? 'bg-[#f1c856]' : 'bg-[#dedede]'}`} />
-              <span className="min-w-0 flex-1 truncate text-[16px] font-medium tracking-[-0.025em] text-[#4b4b4b]">{`${mockUser.nickname}님, 오늘 ${getRoutineTitle(notification.routineId)} 어떠세요?`}</span>
-              <span className="text-right text-[14px] font-medium whitespace-nowrap text-[#777]">{notification.time}</span>
-              <FiChevronRight aria-hidden="true" className="size-4 shrink-0 text-[#777]" />
-            </button>
-          </li>
-        ))}
-      </ul>
+      {isLoading ? (
+        <p className="py-10 text-center text-[16px] text-[#8a8a8a]">알림을 불러오는 중입니다...</p>
+      ) : errorMessage ? (
+        <p className="py-10 text-center text-[16px] font-semibold text-[#c65f55]">{errorMessage}</p>
+      ) : notifications.length === 0 ? (
+        <p className="py-10 text-center text-[16px] text-[#8a8a8a]">오늘 도착한 알림이 없습니다.</p>
+      ) : (
+        <ul>
+          {notifications.map((notification) => (
+            <li className="border-b border-[#d1d1d1]" key={notification.notificationId}>
+              <button className="grid min-h-[90px] w-full grid-cols-[20px_minmax(0,1fr)_72px_16px] items-center gap-3 px-2 text-left hover:bg-[#faf8f2] focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onSelect(notification)} type="button">
+                <span aria-hidden="true" className={`size-5 shrink-0 rounded-full ${notification.read ? 'bg-[#dedede]' : 'bg-[#f1c856]'}`} />
+                <span className="min-w-0 flex-1 truncate text-[16px] font-medium tracking-[-0.025em] text-[#4b4b4b]">{notification.content}</span>
+                <span className="text-right text-[14px] font-medium whitespace-nowrap text-[#777]">{formatRelativeTime(notification.createdAt)}</span>
+                <FiChevronRight aria-hidden="true" className="size-4 shrink-0 text-[#777]" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   </>
 );
-
 const MainPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [routineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? null);
-  const displayedRoutines = routines.map((routine) => {
+  const [mainData, setMainData] = useState({ userName: '', todayRoutines: [] });
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [isNotificationLoading, setIsNotificationLoading] = useState(true);
+  const [notificationError, setNotificationError] = useState('');
+  const [highlightedRoutineId, setHighlightedRoutineId] = useState(null);
+  const [expandedRoutineId, setExpandedRoutineId] = useState(null);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  const apiRoutines = mainData.todayRoutines.map(normalizeRoutine).sort((a, b) => a.scheduledMinutes - b.scheduledMinutes);
+  const displayedRoutines = apiRoutines.map((routine) => {
     if (routine.id !== routineUpdate?.routineId) return routine;
     if (routineUpdate.kind === 'rejected') return { ...routine, status: routineUpdate.status };
 
@@ -129,34 +206,169 @@ const MainPage = () => {
       icon: routineUpdate.missionType === 'water' ? FiDroplet : LuDumbbell,
     };
   });
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [isRoutineCompleted, setIsRoutineCompleted] = useState(false);
-  const [highlightedRoutineId, setHighlightedRoutineId] = useState(null);
-  const [unreadNotificationIds, setUnreadNotificationIds] = useState(() => notifications.map(({ id }) => id));
-  const hasUnreadNotifications = unreadNotificationIds.length > 0;
-  const [expandedRoutineId, setExpandedRoutineId] = useState(null);
-  const [completedRoutineIds] = useState(() =>
-    routines.filter(({ status }) => status.includes('완료')).map(({ id }) => id),
-  );
-  const hasTodayRoutines = Boolean(currentRoutine) || routines.length > 0;
-  const completedRoutineCount = completedRoutineIds.length + (currentRoutine && isRoutineCompleted ? 1 : 0);
-  const totalRoutineCount = routines.length + (currentRoutine ? 1 : 0);
+  const nowMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+  const incompleteRoutines = displayedRoutines.filter(({ completed, status }) => !completed && !status.includes('완료'));
+  const activeRoutine = [...incompleteRoutines]
+    .reverse()
+    .find(({ scheduledMinutes }) => scheduledMinutes <= nowMinutes && nowMinutes < scheduledMinutes + 60);
+  const nextRoutine = incompleteRoutines.find(({ scheduledMinutes }) => scheduledMinutes > nowMinutes);
+  const currentRoutine = activeRoutine
+    ?? nextRoutine
+    ?? incompleteRoutines[0]
+    ?? displayedRoutines[0]
+    ?? null;
+  const routines = displayedRoutines.filter(({ id }) => id !== currentRoutine?.id);
+  const CurrentRoutineIcon = currentRoutine?.icon ?? FiSmile;
+  const completedRoutineCount = displayedRoutines.filter(({ completed, status }) => completed || status.includes('완료')).length;
+  const totalRoutineCount = displayedRoutines.length;
   const routineAchievementRate = totalRoutineCount > 0
     ? Math.round((completedRoutineCount / totalRoutineCount) * 100)
     : 0;
-  const isCurrentRoutineTime = currentRoutine?.status === 'IN_PROGRESS';
+  const isCurrentRoutineTime = currentRoutine
+    ? currentRoutine.scheduledMinutes <= nowMinutes && nowMinutes < currentRoutine.scheduledMinutes + 60
+    : false;
+  const isRoutineCompleted = Boolean(currentRoutine?.completed || currentRoutine?.status.includes('완료'));
+  const hasTodayRoutines = displayedRoutines.length > 0;
+  const hasUnreadNotifications = notifications.some(({ read }) => !read);
 
-  const handleNotificationSelect = ({ id, routineId }) => {
-    setUnreadNotificationIds((current) => current.filter((notificationId) => notificationId !== id));
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadMainPage = async () => {
+      setIsLoading(true);
+      setErrorMessage('');
+      try {
+        let userId = localStorage.getItem('userId');
+        if (!userId) {
+          const profile = await getMyProfile();
+          userId = profile?.id;
+          if (userId) localStorage.setItem('userId', String(userId));
+        }
+        if (!userId) throw new Error('사용자 정보를 확인할 수 없습니다.');
+        const data = await getMainPage(userId);
+        if (isActive) setMainData({ userName: data?.userName ?? '', todayRoutines: data?.todayRoutines ?? [] });
+      } catch (error) {
+        if (isActive) setErrorMessage(error.message);
+      } finally {
+        if (isActive) setIsLoading(false);
+      }
+    };
+
+    loadMainPage();
+    return () => { isActive = false; };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    let isActive = true;
+    let isRequesting = false;
+
+    const loadNotifications = async (showLoading = false) => {
+      if (isRequesting) return;
+      isRequesting = true;
+      if (showLoading) setIsNotificationLoading(true);
+      setNotificationError('');
+
+      try {
+        let userId = localStorage.getItem('userId');
+        if (!userId) {
+          const profile = await getMyProfile();
+          userId = profile?.id;
+          if (userId) localStorage.setItem('userId', String(userId));
+        }
+        if (!userId) throw new Error('사용자 정보를 확인할 수 없습니다.');
+        const data = await getTodayNotifications(userId);
+        if (isActive) {
+          setNotifications(
+            [...(data?.notifications ?? [])].sort(
+              (first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime(),
+            ),
+          );
+        }
+      } catch (error) {
+        if (isActive) setNotificationError(error.message);
+      } finally {
+        isRequesting = false;
+        if (isActive && showLoading) setIsNotificationLoading(false);
+      }
+    };
+
+    const handleFocus = () => loadNotifications();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadNotifications();
+    };
+
+    loadNotifications(true);
+    const intervalId = window.setInterval(() => loadNotifications(), 15000);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  const handleOpenAiChat = () => {
+    navigate('/aichat');
+  };
+
+  const handleCompleteRoutine = async () => {
+    if (!currentRoutine || isCompleting) return;
+    setIsCompleting(true);
+    setErrorMessage('');
+    try {
+      await completeRoutine(currentRoutine.id);
+      setMainData((current) => ({
+        ...current,
+        todayRoutines: current.todayRoutines.map((routine) => (
+          routine.routineId === currentRoutine.id ? { ...routine, completed: true } : routine
+        )),
+      }));
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+  const handleNotificationSelect = async (notification) => {
+    if (!notification.read) {
+      try {
+        await readNotification(notification.notificationId);
+        setNotifications((current) => current.map((item) => (
+          item.notificationId === notification.notificationId ? { ...item, read: true } : item
+        )));
+      } catch (error) {
+        setNotificationError(error.message);
+        return;
+      }
+    }
     setIsNotificationOpen(false);
-    setHighlightedRoutineId(routineId);
-    window.setTimeout(() => {
-      document.querySelector(`[data-routine-id="${routineId}"]`)?.scrollIntoView({
+    setHighlightedRoutineId(notification.routineId);
+    setExpandedRoutineId(
+      notification.routineId !== currentRoutine?.id ? notification.routineId : null,
+    );
+  };
+
+  useEffect(() => {
+    if (!highlightedRoutineId || isNotificationOpen) return undefined;
+    const frameId = window.requestAnimationFrame(() => {
+      document.querySelector(`[data-routine-id="${highlightedRoutineId}"]`)?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });
-    }, 50);
-  };
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [highlightedRoutineId, isNotificationOpen]);
+
   useEffect(() => {
     if (!isNotificationOpen) return undefined;
     const handleKeyDown = (event) => {
@@ -180,7 +392,7 @@ const MainPage = () => {
       <section className="font-pretendard mx-auto flex w-full max-w-[430px] flex-col self-start pb-5 pt-7">
         <header className="flex min-h-[64px] items-center justify-between gap-4">
           <div>
-            <h1 className="text-[24px] font-bold tracking-[-0.04em] text-[#303030]">안녕하세요, {mockUser.nickname}님 <span aria-hidden="true">👋</span></h1>
+            <h1 className="text-[24px] font-bold tracking-[-0.04em] text-[#303030]">안녕하세요, {mainData.userName || '회원'}님 <span aria-hidden="true">👋</span></h1>
             <p className="mt-1 text-[16px] tracking-[-0.025em] text-[#969696]">오늘도 꾸준히 이어가볼까요?</p>
           </div>
           <button aria-expanded={isNotificationOpen} aria-label={hasUnreadNotifications ? '읽지 않은 알림 보기' : '알림 보기'} className="relative shrink-0 rounded-full p-2 text-[#303030] hover:bg-[#f5f1e7] focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setIsNotificationOpen(true)} type="button">
@@ -203,7 +415,16 @@ const MainPage = () => {
 
         <h2 className="mt-6 text-[24px] font-bold tracking-[-0.04em] text-[#292929]">오늘의 루틴</h2>
 
-        {!hasTodayRoutines ? (
+        {isLoading ? (
+          <div className="mt-5 flex min-h-[180px] items-center justify-center rounded-[24px] border border-[#ece9e2] bg-white px-6 text-center shadow-[0_2px_6px_rgba(44,44,44,0.03)]">
+            <p className="text-[16px] font-semibold text-[#8a8a8a]">오늘의 루틴을 불러오는 중입니다...</p>
+          </div>
+        ) : errorMessage ? (
+          <div className="mt-5 flex min-h-[180px] flex-col items-center justify-center gap-4 rounded-[24px] border border-[#f0c7c2] bg-white px-6 text-center shadow-[0_2px_6px_rgba(44,44,44,0.03)]">
+            <p className="text-[16px] font-semibold text-[#c65f55]">{errorMessage}</p>
+            <button className="rounded-full bg-[#f4d15d] px-6 py-3 text-[14px] font-bold text-[#37322a]" onClick={() => setReloadKey((current) => current + 1)} type="button">다시 시도</button>
+          </div>
+        ) : !hasTodayRoutines ? (
           <div className="mt-5 flex min-h-[180px] items-center justify-center rounded-[24px] border border-[#ece9e2] bg-white px-6 text-center shadow-[0_2px_6px_rgba(44,44,44,0.03)]">
             <p className="text-[16px] font-semibold text-[#8a8a8a]">현재 등록된 루틴이 없습니다</p>
           </div>
@@ -213,7 +434,7 @@ const MainPage = () => {
         <article className={`mt-5 rounded-[24px] border-2 bg-[#fffdf2] px-5 shadow-[0_5px_10px_rgba(170,136,36,0.08)] ${highlightedRoutineId === currentRoutine.id ? 'border-[#e78d84]' : 'border-[#f2d984]'} ${isRoutineCompleted ? 'py-6' : 'pb-7 pt-9'}`} data-routine-id={currentRoutine.id} onClick={() => setHighlightedRoutineId(null)}>
           <div className="grid grid-cols-[48px_minmax(0,1fr)_76px] items-center gap-3">
             <div className="relative flex size-12 shrink-0 items-center justify-center rounded-full bg-[#fff1b9] text-[#8877ef]">
-              <LuDumbbell className="size-8 rotate-[-40deg]" strokeWidth={3} />
+              <CurrentRoutineIcon className="size-8" strokeWidth={3} />
               <span className="absolute right-0 top-0 size-2.5 rounded-full bg-[#f0bf64]" />
             </div>
             <div className="min-w-0 flex-1">
@@ -226,35 +447,43 @@ const MainPage = () => {
           {!isRoutineCompleted && (
             isCurrentRoutineTime ? (
               <div className="mt-7 grid grid-cols-2 gap-3">
-                <button className="flex min-h-[58px] items-center justify-center gap-2 rounded-full bg-[#f4d15d] px-3 text-[16px] font-bold text-[#37322a] shadow-[0_4px_8px_rgba(178,145,49,0.18)] active:scale-[0.98]" onClick={() => setIsRoutineCompleted(true)} type="button">
-                  <FiCheck className="size-5" strokeWidth={2.5} /> 완료했어요
+                <button className="flex min-h-[58px] items-center justify-center gap-2 rounded-full bg-[#f4d15d] px-3 text-[16px] font-bold text-[#37322a] shadow-[0_4px_8px_rgba(178,145,49,0.18)] active:scale-[0.98]" disabled={isCompleting} onClick={handleCompleteRoutine} type="button">
+                  <FiCheck className="size-5" strokeWidth={2.5} /> {isCompleting ? '처리 중...' : '완료했어요'}
                 </button>
-                <button className="min-h-[58px] rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" type="button">못 지킬 것 같아요</button>
+                <button className="min-h-[58px] rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={handleOpenAiChat} type="button">못 지킬 것 같아요</button>
               </div>
             ) : (
               <div className="mt-7">
-                <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" type="button">못 지킬 것 같아요</button>
+                <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={handleOpenAiChat} type="button">못 지킬 것 같아요</button>
               </div>
             )
           )}
         </article>
 
         <div className="mt-6 flex flex-col gap-3">
-          {displayedRoutines.map((routine) => (
+          {routines.map((routine) => (
             <RoutineItem
               {...routine}
               isExpanded={expandedRoutineId === routine.id}
               isHighlighted={highlightedRoutineId === routine.id}
               key={routine.id}
-              onToggle={() => { setHighlightedRoutineId(null); setExpandedRoutineId((current) => current === routine.id ? null : routine.id); }}
-              status={completedRoutineIds.includes(routine.id) && !routine.status.includes('완료') ? '완료' : routine.status}
+              onCannotComplete={handleOpenAiChat}
+              onToggle={() => {
+                if (highlightedRoutineId === routine.id) {
+                  setHighlightedRoutineId(null);
+                  setExpandedRoutineId(routine.id);
+                  return;
+                }
+                setExpandedRoutineId((current) => current === routine.id ? null : routine.id);
+              }}
+              status={routine.status}
             />
           ))}
         </div>
           </>
         )}
       </section>
-      {isNotificationOpen && <NotificationPanel onClose={() => setIsNotificationOpen(false)} onSelect={handleNotificationSelect} unreadNotificationIds={unreadNotificationIds} />}
+      {isNotificationOpen && <NotificationPanel errorMessage={notificationError} isLoading={isNotificationLoading} notifications={notifications} onClose={() => setIsNotificationOpen(false)} onSelect={handleNotificationSelect} />}
     </>
   );
 };
