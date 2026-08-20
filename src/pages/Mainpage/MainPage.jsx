@@ -14,7 +14,7 @@ import {
   FiX,
 } from 'react-icons/fi';
 import { LuCoffee, LuCookie, LuDumbbell, LuFootprints, LuUtensils } from 'react-icons/lu';
-import { completeRoutine, getMainPage, getMyProfile, getTodayNotifications, readNotification } from '@/api/mainApi';
+import { completeAlternativeMission, completeRoutine, getMainPage, getMyProfile, getTodayNotifications, readNotification } from '@/api/mainApi';
 
 const parseScheduledTime = (scheduledTime) => {
   if (!scheduledTime) return { hour: 0, minute: 0, isValid: false };
@@ -80,9 +80,11 @@ const toneStyles = {
   yellow: { icon: 'bg-[#fff5c7] text-[#8b78f2]', status: 'bg-[#ececec] text-[#777]' },
 };
 
-const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = false, onCannotComplete, onToggle, status, time, title, tone }) => {
+const isCompletedStatus = (status) => status === '완료' || status === '대체 미션 완료';
+
+const RoutineItem = ({ icon: Icon, id, isCompletingAlternative, isExpanded, isHighlighted, isMissed = false, onCannotComplete, onCompleteAlternative, onToggle, status, time, title, tone }) => {
   const styles = toneStyles[tone];
-  const isCompleted = status.includes('완료');
+  const isCompleted = isCompletedStatus(status);
   const statusStyle = isMissed || status === '미완료'
     ? 'border border-[#e78d84] bg-[#fff4f2] text-[#c65f55]'
     : status === '대체 미션 완료'
@@ -108,13 +110,17 @@ const RoutineItem = ({ icon: Icon, id, isExpanded, isHighlighted, isMissed = fal
               <p className="text-[16px] font-semibold tracking-[-0.03em] text-[#777268]">선택한 루틴이에요!</p>
               <span className={`justify-self-end shrink-0 rounded-full py-2 text-[14px] font-semibold leading-none ${statusPadding} ${statusStyle}`}>{displayedStatus}</span>
             </div>
-            <h3 className="whitespace-nowrap text-[32px] font-extrabold leading-tight tracking-[-0.05em] text-[#181818]">{title}</h3>
+            <h3 className="break-keep text-[32px] font-extrabold leading-[1.2] tracking-[-0.05em] text-[#181818] [overflow-wrap:anywhere]">{title}</h3>
             <p className="mt-1 text-[16px] font-semibold text-[#929292]">{time}</p>
           </div>
         </button>
         {!isCompleted && !isMissed && (
           <div className="mt-7">
-            <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={onCannotComplete} type="button">못 지킬 것 같아요</button>
+            {status === '대체 미션 진행중' ? (
+              <button className="min-h-[58px] w-full rounded-full bg-[#f4d15d] px-3 text-[16px] font-bold text-[#37322a] shadow-[0_4px_8px_rgba(178,145,49,0.18)] active:scale-[0.98] disabled:opacity-60" disabled={isCompletingAlternative} onClick={onCompleteAlternative} type="button">{isCompletingAlternative ? '처리 중...' : '대체 미션 완료했어요'}</button>
+            ) : (
+              <button className="min-h-[58px] w-full rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={onCannotComplete} type="button">못 지킬 것 같아요</button>
+            )}
           </div>
         )}
       </article>
@@ -178,11 +184,12 @@ const NotificationPanel = ({ errorMessage, isLoading, notifications, onClose, on
 const MainPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [routineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? null);
+  const [routineUpdate, setRoutineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? null);
   const [mainData, setMainData] = useState({ userName: '', todayRoutines: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isCompletingAlternative, setIsCompletingAlternative] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -207,7 +214,7 @@ const MainPage = () => {
     };
   });
   const nowMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
-  const incompleteRoutines = displayedRoutines.filter(({ completed, status }) => !completed && !status.includes('완료'));
+  const incompleteRoutines = displayedRoutines.filter(({ completed, status }) => !completed && !isCompletedStatus(status) && status !== '미완료');
   const activeRoutine = [...incompleteRoutines]
     .reverse()
     .find(({ scheduledMinutes }) => scheduledMinutes <= nowMinutes && nowMinutes < scheduledMinutes + 60);
@@ -219,7 +226,7 @@ const MainPage = () => {
     ?? null;
   const routines = displayedRoutines.filter(({ id }) => id !== currentRoutine?.id);
   const CurrentRoutineIcon = currentRoutine?.icon ?? FiSmile;
-  const completedRoutineCount = displayedRoutines.filter(({ completed, status }) => completed || status.includes('완료')).length;
+  const completedRoutineCount = displayedRoutines.filter(({ completed, status }) => completed || isCompletedStatus(status)).length;
   const totalRoutineCount = displayedRoutines.length;
   const routineAchievementRate = totalRoutineCount > 0
     ? Math.round((completedRoutineCount / totalRoutineCount) * 100)
@@ -227,7 +234,12 @@ const MainPage = () => {
   const isCurrentRoutineTime = currentRoutine
     ? currentRoutine.scheduledMinutes <= nowMinutes && nowMinutes < currentRoutine.scheduledMinutes + 60
     : false;
-  const isRoutineCompleted = Boolean(currentRoutine?.completed || currentRoutine?.status.includes('완료'));
+  const isRoutineCompleted = Boolean(currentRoutine?.completed || isCompletedStatus(currentRoutine?.status));
+  const isCurrentAlternativeMission = Boolean(
+    routineUpdate?.kind === 'accepted'
+      && routineUpdate?.missionId
+      && currentRoutine?.id === routineUpdate.routineId,
+  );
   const hasTodayRoutines = displayedRoutines.length > 0;
   const hasUnreadNotifications = notifications.some(({ read }) => !read);
 
@@ -321,8 +333,26 @@ const MainPage = () => {
     navigate('/aichat');
   };
 
+  const handleCompleteAlternative = async () => {
+    if (!routineUpdate?.missionId || isCompletingAlternative) return;
+    setIsCompletingAlternative(true);
+    setErrorMessage('');
+    try {
+      await completeAlternativeMission(routineUpdate.missionId);
+      setRoutineUpdate((current) => ({ ...current, status: '대체 미션 완료' }));
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setIsCompletingAlternative(false);
+    }
+  };
+
   const handleCompleteRoutine = async () => {
-    if (!currentRoutine || isCompleting) return;
+    if (!currentRoutine || isCompleting || isCompletingAlternative) return;
+    if (isCurrentAlternativeMission) {
+      await handleCompleteAlternative();
+      return;
+    }
     setIsCompleting(true);
     setErrorMessage('');
     try {
@@ -442,13 +472,13 @@ const MainPage = () => {
               <h3 className="text-[32px] font-extrabold leading-tight tracking-[-0.05em] text-[#181818]">{currentRoutine.title}</h3>
               <p className="text-[16px] font-semibold text-[#929292]">{currentRoutine.time}</p>
             </div>
-            <span className={`w-[76px] justify-self-end rounded-full px-3 py-2 text-center text-[14px] font-semibold ${isRoutineCompleted ? 'bg-[#d9f2d5] text-[#64a56e]' : 'bg-[#eeeef0] text-[#838383]'}`}>{isRoutineCompleted ? '완료' : isCurrentRoutineTime ? '진행중' : '대기'}</span>
+            <span className={`min-w-[76px] max-w-[116px] justify-self-end rounded-full px-3 py-2 text-center text-[14px] font-semibold ${isRoutineCompleted ? 'bg-[#d9f2d5] text-[#64a56e]' : 'bg-[#eeeef0] text-[#838383]'}`}>{currentRoutine.status.startsWith('대체 미션') ? currentRoutine.status : isRoutineCompleted ? '완료' : isCurrentRoutineTime ? '진행중' : '대기'}</span>
           </div>
           {!isRoutineCompleted && (
-            isCurrentRoutineTime ? (
+            (isCurrentRoutineTime || isCurrentAlternativeMission) ? (
               <div className="mt-7 grid grid-cols-2 gap-3">
                 <button className="flex min-h-[58px] items-center justify-center gap-2 rounded-full bg-[#f4d15d] px-3 text-[16px] font-bold text-[#37322a] shadow-[0_4px_8px_rgba(178,145,49,0.18)] active:scale-[0.98]" disabled={isCompleting} onClick={handleCompleteRoutine} type="button">
-                  <FiCheck className="size-5" strokeWidth={2.5} /> {isCompleting ? '처리 중...' : '완료했어요'}
+                  <FiCheck className="size-5" strokeWidth={2.5} /> {isCompleting || isCompletingAlternative ? '처리 중...' : isCurrentAlternativeMission ? '대체 미션 완료' : '완료했어요'}
                 </button>
                 <button className="min-h-[58px] rounded-full border border-[#e6e6e6] bg-white px-3 text-[16px] font-bold text-[#444] shadow-[0_3px_8px_rgba(44,44,44,0.09)] active:scale-[0.98]" onClick={handleOpenAiChat} type="button">못 지킬 것 같아요</button>
               </div>
@@ -466,8 +496,10 @@ const MainPage = () => {
               {...routine}
               isExpanded={expandedRoutineId === routine.id}
               isHighlighted={highlightedRoutineId === routine.id}
+              isCompletingAlternative={isCompletingAlternative}
               key={routine.id}
               onCannotComplete={handleOpenAiChat}
+              onCompleteAlternative={handleCompleteAlternative}
               onToggle={() => {
                 if (highlightedRoutineId === routine.id) {
                   setHighlightedRoutineId(null);
