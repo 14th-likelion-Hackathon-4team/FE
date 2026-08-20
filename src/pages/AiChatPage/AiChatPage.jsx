@@ -28,6 +28,7 @@ const authenticatedRequest = async (path, options = {}) => {
 };
 
 const getMyProfile = () => authenticatedRequest('/api/v1/routinefit/users/me');
+const getRoutines = () => authenticatedRequest('/api/v1/routinefit/routines');
 const getMainPage = (userId) => authenticatedRequest(
   `/api/v1/routinefit/main?userId=${encodeURIComponent(userId)}`,
 );
@@ -58,27 +59,69 @@ const formatTime = (value) => {
   return `${String(value.hour ?? 0).padStart(2, '0')}:${String(value.minute ?? 0).padStart(2, '0')}`;
 };
 
+const toLocalDateString = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const filterActiveDateRoutines = (todayRoutines, routineDefinitions) => {
+  if (!Array.isArray(routineDefinitions)) return todayRoutines;
+
+  const today = toLocalDateString();
+  const definitionsById = new Map(routineDefinitions.map((routine) => [String(routine.id), routine]));
+
+  return todayRoutines.filter((routine) => {
+    const definition = definitionsById.get(String(routine.routineId));
+    if (!definition) return true;
+    if (definition.active === false) return false;
+    if (definition.startDate && definition.startDate > today) return false;
+    if (definition.endDate && definition.endDate < today) return false;
+    return true;
+  });
+};
+
 const getRoutineVisual = (name = '') => {
   if (/물|수분/.test(name)) return { tone: 'blue', icon: FiDroplet };
   if (/스킨|약|케어/.test(name)) return { tone: 'red', icon: FiHeart };
   return { tone: 'green', icon: FiSmile };
 };
 
+const parseCompleted = (value) => value === true || value === 1 || value === 'true' || value === '1';
+
+const getRoutineStatus = (routine, completed) => {
+  const routineStatus = routine.routineStatus?.toUpperCase();
+  const missionStatus = routine.alternativeMissionStatus?.toUpperCase();
+
+  if (routineStatus === 'ALTERNATIVE_COMPLETED' || missionStatus === 'COMPLETED') return '대체 미션 완료';
+  if (routineStatus === 'ALTERNATIVE_IN_PROGRESS' || routineStatus === 'ALTERNATIVE_ACCEPTED' || missionStatus === 'ACCEPTED') return '대체 미션 진행중';
+  if (routineStatus === 'MISSED' || routineStatus === 'FAILED' || routineStatus === 'ALTERNATIVE_REJECTED' || missionStatus === 'REJECTED') return '미완료';
+  if (completed || routineStatus === 'COMPLETED') return '완료';
+  return '대기';
+};
+
 const normalizeRoutine = (routine, savedRoutineUpdate) => {
   const routineId = routine.routineId ?? routine.id;
   const routineTitle = routine.routineName ?? routine.title;
-  const savedUpdate = savedRoutineUpdate?.routineId === routineId
+  const completed = parseCompleted(routine.completed);
+  const hasServerAlternativeState = Boolean(
+    routine.alternativeMissionId
+      || routine.alternativeMissionStatus
+      || routine.routineStatus?.startsWith('ALTERNATIVE_'),
+  );
+  const savedUpdate = !hasServerAlternativeState && savedRoutineUpdate?.routineId === routineId
     ? savedRoutineUpdate
     : null;
-  const status = routine.completed
-    ? '완료'
-    : (savedUpdate?.status ?? '대기');
-  const title = savedUpdate?.kind === 'accepted' && savedUpdate.title
-    ? savedUpdate.title
-    : routineTitle;
+  const status = hasServerAlternativeState || routine.routineStatus
+    ? getRoutineStatus(routine, completed)
+    : (savedUpdate?.status ?? (completed ? '완료' : '대기'));
+  const title = routine.alternativeMissionTitle
+    || (savedUpdate?.kind === 'accepted' && savedUpdate.title ? savedUpdate.title : routineTitle);
 
   return {
     id: routineId,
+    missionId: routine.alternativeMissionId,
     title,
     time: formatTime(routine.scheduledTime ?? routine.performTime),
     status,
@@ -113,7 +156,7 @@ const RoutineOption = ({ icon: Icon, isSelected, isUnavailable, onSelect, status
       <strong className="block truncate text-[16px] font-bold text-[#292929]">{title}</strong>
       <span className="mt-1 block text-[14px] text-[#8d8d8d]">{time}</span>
     </span>
-    <span className={`shrink-0 rounded-full px-4 py-2 text-[14px] font-semibold ${status === '완료' ? 'bg-[#d9f2d5] text-[#64a56e]' : 'bg-[#ececec] text-[#777]'}`}>
+    <span className={`shrink-0 whitespace-nowrap rounded-full px-3 py-2 font-semibold ${status.startsWith('대체 미션') ? 'text-[12px]' : 'text-[14px]'} ${status === '대체 미션 완료' ? 'bg-[#dceaff] text-[#6994cc]' : status === '완료' ? 'bg-[#d9f2d5] text-[#64a56e]' : status === '미완료' ? 'bg-[#fff4f2] text-[#c65f55]' : 'bg-[#ececec] text-[#777]'}`}>
       {status}
     </span>
   </button>
@@ -184,8 +227,11 @@ const AiChatPage = () => {
     setIsRoutineLoading(true);
     try {
       const profile = await getMyProfile();
-      const mainData = await getMainPage(profile.id);
-      const routineList = mainData?.todayRoutines ?? [];
+      const [mainData, routineDefinitions] = await Promise.all([
+        getMainPage(profile.id),
+        getRoutines().catch(() => null),
+      ]);
+      const routineList = filterActiveDateRoutines(mainData?.todayRoutines ?? [], routineDefinitions);
       const savedRoutineUpdate = readRoutineUpdate();
 
       setUserName(profile?.nickname ?? '회원');
