@@ -30,6 +30,11 @@ export const completeRoutine = (routineId) => authenticatedRequest(
   `/api/v1/routinefit/routines/${routineId}/complete`,
   { method: 'PATCH' },
 );
+
+export const completeAlternativeMission = (missionId) => authenticatedRequest(
+  `/api/v1/routinefit/missions/${missionId}/complete`,
+  { method: 'PATCH' },
+);
 export const getMyProfile = () => authenticatedRequest('/api/v1/routinefit/users/me');
 
 export const getTodayNotifications = (userId) => authenticatedRequest(
