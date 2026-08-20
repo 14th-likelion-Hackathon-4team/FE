@@ -28,6 +28,9 @@ const authenticatedRequest = async (path, options = {}) => {
 
 const getMyProfile = () => authenticatedRequest('/api/v1/routinefit/users/me');
 const getRoutines = () => authenticatedRequest('/api/v1/routinefit/routines');
+const getMainPage = (userId) => authenticatedRequest(
+  `/api/v1/routinefit/main?userId=${encodeURIComponent(userId)}`,
+);
 const startChat = (routineId) => authenticatedRequest(
   `/api/v1/routinefit/routines/${routineId}/chats`,
   { method: 'POST' },
@@ -85,11 +88,11 @@ const isRoutineScheduledToday = (routine, today = new Date()) => {
   return true;
 };
 
-const normalizeRoutine = (routine) => ({
+const normalizeRoutine = (routine, completedRoutineIds) => ({
   id: routine.id,
   title: routine.title,
   time: formatTime(routine.performTime),
-  status: '대기',
+  status: completedRoutineIds.has(routine.id) ? '완료' : '대기',
   ...getRoutineVisual(routine.title),
 });
 
@@ -184,11 +187,24 @@ const AiChatPage = () => {
   const handleStart = async () => {
     setIsRoutineLoading(true);
     try {
-      const [profile, routineData] = await Promise.all([getMyProfile(), getRoutines()]);
+      const profile = await getMyProfile();
+      const [routineData, mainData] = await Promise.all([
+        getRoutines(),
+        getMainPage(profile.id).catch(() => null),
+      ]);
       const routineList = Array.isArray(routineData) ? routineData : (routineData?.routines ?? []);
+      const completedRoutineIds = new Set(
+        (mainData?.todayRoutines ?? [])
+          .filter((routine) => routine.completed)
+          .map((routine) => routine.routineId),
+      );
 
       setUserName(profile?.nickname ?? '회원');
-      setRoutines(routineList.filter((routine) => isRoutineScheduledToday(routine)).map(normalizeRoutine));
+      setRoutines(
+        routineList
+          .filter((routine) => isRoutineScheduledToday(routine))
+          .map((routine) => normalizeRoutine(routine, completedRoutineIds)),
+      );
       setScreen('select');
     } catch (error) {
       setNotice(error.message);
@@ -250,7 +266,20 @@ const AiChatPage = () => {
     setIsActionLoading(true);
     try {
       await handleMissionAction(mission.missionId, action);
-      navigate('/');
+      const isAccepted = action === 'ACCEPT';
+      navigate('/', {
+        state: {
+          routineUpdate: {
+            kind: isAccepted ? 'accepted' : 'rejected',
+            missionId: mission.missionId,
+            missionType: /물|수분/.test(mission.content) ? 'water' : 'exercise',
+            routineId: selectedRoutine.id,
+            status: isAccepted ? '대체 미션 진행중' : '미완료',
+            time: selectedRoutine.time,
+            title: isAccepted ? mission.content : selectedRoutine.title,
+          },
+        },
+      });
     } catch (error) {
       setNotice(error.message);
     } finally {
