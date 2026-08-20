@@ -15,6 +15,7 @@ import {
 } from 'react-icons/fi';
 import { LuCoffee, LuCookie, LuDumbbell, LuFootprints, LuUtensils } from 'react-icons/lu';
 import { completeAlternativeMission, completeRoutine, getMainPage, getMyProfile, getTodayNotifications, readNotification } from '@/api/mainApi';
+import { readRoutineUpdate, saveRoutineUpdate } from '@/utils/routineUpdateStorage';
 
 const parseScheduledTime = (scheduledTime) => {
   if (!scheduledTime) return { hour: 0, minute: 0, isValid: false };
@@ -184,7 +185,7 @@ const NotificationPanel = ({ errorMessage, isLoading, notifications, onClose, on
 const MainPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [routineUpdate, setRoutineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? null);
+  const [routineUpdate, setRoutineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? readRoutineUpdate());
   const [mainData, setMainData] = useState({ userName: '', todayRoutines: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -339,7 +340,11 @@ const MainPage = () => {
     setErrorMessage('');
     try {
       await completeAlternativeMission(routineUpdate.missionId);
-      setRoutineUpdate((current) => ({ ...current, status: '대체 미션 완료' }));
+      setRoutineUpdate((current) => {
+        const updated = { ...current, status: '대체 미션 완료' };
+        saveRoutineUpdate(updated);
+        return updated;
+      });
     } catch (error) {
       setErrorMessage(error.message);
     } finally {
