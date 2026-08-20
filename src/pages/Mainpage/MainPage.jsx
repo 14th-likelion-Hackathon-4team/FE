@@ -353,9 +353,9 @@ const MainPage = () => {
     }
     setIsNotificationOpen(false);
     setHighlightedRoutineId(notification.routineId);
-    if (notification.routineId !== currentRoutine?.id) {
-      setExpandedRoutineId(notification.routineId);
-    }
+    setExpandedRoutineId(
+      notification.routineId !== currentRoutine?.id ? notification.routineId : null,
+    );
   };
 
   useEffect(() => {
