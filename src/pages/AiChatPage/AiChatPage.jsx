@@ -27,11 +27,9 @@ const authenticatedRequest = async (path, options = {}) => {
 };
 
 const getMyProfile = () => authenticatedRequest('/api/v1/routinefit/users/me');
-const getMainPage = (userId) => authenticatedRequest(
-  `/api/v1/routinefit/main?userId=${encodeURIComponent(userId)}`,
-);
-const startChat = (routineLogId) => authenticatedRequest(
-  `/api/v1/routinefit/routine-logs/${routineLogId}/chats`,
+const getRoutines = () => authenticatedRequest('/api/v1/routinefit/routines');
+const startChat = (routineId) => authenticatedRequest(
+  `/api/v1/routinefit/routines/${routineId}/chats`,
   { method: 'POST' },
 );
 const sendChatMessage = (currentChatId, message) => authenticatedRequest(
@@ -63,13 +61,36 @@ const getRoutineVisual = (name = '') => {
   return { tone: 'green', icon: FiSmile };
 };
 
+const weekdayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+const toLocalDateString = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const isRoutineScheduledToday = (routine, today = new Date()) => {
+  if (!routine.active) return false;
+
+  const date = toLocalDateString(today);
+  if (routine.startDate && routine.startDate > date) return false;
+  if (routine.endDate && routine.endDate < date) return false;
+
+  if (routine.repeatType === 'WEEKLY') {
+    const repeatDays = (routine.repeatDays ?? '').split(',').map((day) => day.trim());
+    return repeatDays.includes(weekdayCodes[today.getDay()]);
+  }
+
+  return true;
+};
+
 const normalizeRoutine = (routine) => ({
-  id: routine.routineId,
-  routineLogId: routine.routineLogId ?? null,
-  title: routine.routineName,
-  time: formatTime(routine.scheduledTime),
-  status: routine.completed ? '완료' : '대기',
-  ...getRoutineVisual(routine.routineName),
+  id: routine.id,
+  title: routine.title,
+  time: formatTime(routine.performTime),
+  status: '대기',
+  ...getRoutineVisual(routine.title),
 });
 
 const toneStyles = {
@@ -163,17 +184,11 @@ const AiChatPage = () => {
   const handleStart = async () => {
     setIsRoutineLoading(true);
     try {
-      let userId = localStorage.getItem('userId');
-      let profile;
-      if (!userId) {
-        profile = await getMyProfile();
-        userId = profile?.id;
-        if (userId) localStorage.setItem('userId', String(userId));
-      }
-      if (!userId) throw new Error('사용자 정보를 확인할 수 없습니다.');
-      const data = await getMainPage(userId);
-      setUserName(data?.userName ?? profile?.nickname ?? '회원');
-      setRoutines((data?.todayRoutines ?? []).map(normalizeRoutine));
+      const [profile, routineData] = await Promise.all([getMyProfile(), getRoutines()]);
+      const routineList = Array.isArray(routineData) ? routineData : (routineData?.routines ?? []);
+
+      setUserName(profile?.nickname ?? '회원');
+      setRoutines(routineList.filter((routine) => isRoutineScheduledToday(routine)).map(normalizeRoutine));
       setScreen('select');
     } catch (error) {
       setNotice(error.message);
@@ -184,15 +199,15 @@ const AiChatPage = () => {
 
   const handleCreateSuggestion = async (reasonContent) => {
     if (!selectedRoutine) return;
-    if (!selectedRoutine.routineLogId) {
-      setNotice('루틴 수행 기록 정보가 없어 대화를 시작할 수 없습니다. 백엔드 응답의 routineLogId를 확인해주세요.');
+    if (!selectedRoutine.id) {
+      setNotice('루틴 정보를 확인할 수 없어 대화를 시작할 수 없습니다.');
       return;
     }
     setIsMissionLoading(true);
     try {
       let nextChatId = chatId;
       if (!nextChatId) {
-        const chat = await startChat(selectedRoutine.routineLogId);
+        const chat = await startChat(selectedRoutine.id);
         nextChatId = chat?.chatId;
         if (!nextChatId) throw new Error('대화 정보를 확인할 수 없습니다.');
         setChatId(nextChatId);
