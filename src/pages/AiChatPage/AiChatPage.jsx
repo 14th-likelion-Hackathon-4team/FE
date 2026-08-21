@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FiChevronLeft, FiDroplet, FiHeart, FiSmile } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
+import { readRoutineUpdate, saveRoutineUpdate } from '@/utils/routineUpdateStorage';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const authenticatedRequest = async (path, options = {}) => {
@@ -58,43 +59,81 @@ const formatTime = (value) => {
   return `${String(value.hour ?? 0).padStart(2, '0')}:${String(value.minute ?? 0).padStart(2, '0')}`;
 };
 
-const getRoutineVisual = (name = '') => {
-  if (/물|수분/.test(name)) return { tone: 'blue', icon: FiDroplet };
-  if (/스킨|약|케어/.test(name)) return { tone: 'red', icon: FiHeart };
-  return { tone: 'green', icon: FiSmile };
-};
-
-const weekdayCodes = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-
-const toLocalDateString = (date) => {
+const toLocalDateString = (date = new Date()) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
 
-const isRoutineScheduledToday = (routine, today = new Date()) => {
-  if (!routine.active) return false;
+const filterActiveDateRoutines = (todayRoutines, routineDefinitions) => {
+  if (!Array.isArray(routineDefinitions)) return todayRoutines;
 
-  const date = toLocalDateString(today);
-  if (routine.startDate && routine.startDate > date) return false;
-  if (routine.endDate && routine.endDate < date) return false;
+  const today = toLocalDateString();
+  const definitionsById = new Map(routineDefinitions.map((routine) => [String(routine.id), routine]));
 
-  if (routine.repeatType === 'WEEKLY') {
-    const repeatDays = (routine.repeatDays ?? '').split(',').map((day) => day.trim());
-    return repeatDays.includes(weekdayCodes[today.getDay()]);
-  }
-
-  return true;
+  return todayRoutines.filter((routine) => {
+    const definition = definitionsById.get(String(routine.routineId));
+    if (!definition) return true;
+    if (definition.active === false) return false;
+    if (definition.startDate && definition.startDate > today) return false;
+    if (definition.endDate && definition.endDate < today) return false;
+    return true;
+  });
 };
 
-const normalizeRoutine = (routine, completedRoutineIds) => ({
-  id: routine.id,
-  title: routine.title,
-  time: formatTime(routine.performTime),
-  status: completedRoutineIds.has(routine.id) ? '완료' : '대기',
-  ...getRoutineVisual(routine.title),
-});
+const getRoutineVisual = (name = '') => {
+  if (/물|수분/.test(name)) return { tone: 'blue', icon: FiDroplet };
+  if (/스킨|약|케어/.test(name)) return { tone: 'red', icon: FiHeart };
+  return { tone: 'green', icon: FiSmile };
+};
+
+const parseCompleted = (value) => value === true || value === 1 || value === 'true' || value === '1';
+
+const getRoutineStatus = (routine, completed) => {
+  const routineStatus = routine.routineStatus?.toUpperCase();
+  const missionStatus = routine.alternativeMissionStatus?.toUpperCase();
+
+  if (routineStatus === 'ALTERNATIVE_COMPLETED' || missionStatus === 'COMPLETED') return '대체 미션 완료';
+  if (routineStatus === 'ALTERNATIVE_IN_PROGRESS' || routineStatus === 'ALTERNATIVE_ACCEPTED' || missionStatus === 'ACCEPTED') return '대체 미션 진행중';
+  if (routineStatus === 'MISSED' || routineStatus === 'FAILED' || routineStatus === 'ALTERNATIVE_REJECTED' || missionStatus === 'REJECTED') return '미완료';
+  if (completed || routineStatus === 'COMPLETED') return '완료';
+  return '대기';
+};
+
+const normalizeRoutine = (routine, savedRoutineUpdate) => {
+  const routineId = routine.routineId ?? routine.id;
+  const routineTitle = routine.routineName ?? routine.title;
+  const completed = parseCompleted(routine.completed);
+  const hasServerAlternativeState = Boolean(
+    routine.alternativeMissionId
+      || routine.alternativeMissionStatus
+      || routine.routineStatus?.startsWith('ALTERNATIVE_'),
+  );
+  const savedUpdate = !hasServerAlternativeState && savedRoutineUpdate?.routineId === routineId
+    ? savedRoutineUpdate
+    : null;
+  const status = hasServerAlternativeState || routine.routineStatus
+    ? getRoutineStatus(routine, completed)
+    : (savedUpdate?.status ?? (completed ? '완료' : '대기'));
+  const title = routine.alternativeMissionTitle
+    || (savedUpdate?.kind === 'accepted' && savedUpdate.title ? savedUpdate.title : routineTitle);
+
+  return {
+    id: routineId,
+    missionId: routine.alternativeMissionId,
+    title,
+    time: formatTime(routine.scheduledTime ?? routine.performTime),
+    status,
+    ...getRoutineVisual(title),
+  };
+};
+
+const getUnavailableRoutineMessage = (status) => {
+  if (status === '대체 미션 진행중') return '이미 진행 중인 대체 미션이 있습니다.';
+  if (status === '미완료') return '이미 미완료 처리된 루틴입니다.';
+  return '이미 완료된 루틴입니다.';
+};
 
 const toneStyles = {
   green: 'bg-[#d9f2d5] text-[#67bb82]',
@@ -117,7 +156,7 @@ const RoutineOption = ({ icon: Icon, isSelected, isUnavailable, onSelect, status
       <strong className="block truncate text-[16px] font-bold text-[#292929]">{title}</strong>
       <span className="mt-1 block text-[14px] text-[#8d8d8d]">{time}</span>
     </span>
-    <span className={`shrink-0 rounded-full px-4 py-2 text-[14px] font-semibold ${status === '완료' ? 'bg-[#d9f2d5] text-[#64a56e]' : 'bg-[#ececec] text-[#777]'}`}>
+    <span className={`shrink-0 whitespace-nowrap rounded-full px-3 py-2 font-semibold ${status.startsWith('대체 미션') ? 'text-[12px]' : 'text-[14px]'} ${status === '대체 미션 완료' ? 'bg-[#dceaff] text-[#6994cc]' : status === '완료' ? 'bg-[#d9f2d5] text-[#64a56e]' : status === '미완료' ? 'bg-[#fff4f2] text-[#c65f55]' : 'bg-[#ececec] text-[#777]'}`}>
       {status}
     </span>
   </button>
@@ -188,22 +227,16 @@ const AiChatPage = () => {
     setIsRoutineLoading(true);
     try {
       const profile = await getMyProfile();
-      const [routineData, mainData] = await Promise.all([
-        getRoutines(),
-        getMainPage(profile.id).catch(() => null),
+      const [mainData, routineDefinitions] = await Promise.all([
+        getMainPage(profile.id),
+        getRoutines().catch(() => null),
       ]);
-      const routineList = Array.isArray(routineData) ? routineData : (routineData?.routines ?? []);
-      const completedRoutineIds = new Set(
-        (mainData?.todayRoutines ?? [])
-          .filter((routine) => routine.completed)
-          .map((routine) => routine.routineId),
-      );
+      const routineList = filterActiveDateRoutines(mainData?.todayRoutines ?? [], routineDefinitions);
+      const savedRoutineUpdate = readRoutineUpdate();
 
       setUserName(profile?.nickname ?? '회원');
       setRoutines(
-        routineList
-          .filter((routine) => isRoutineScheduledToday(routine))
-          .map((routine) => normalizeRoutine(routine, completedRoutineIds)),
+        routineList.map((routine) => normalizeRoutine(routine, savedRoutineUpdate)),
       );
       setScreen('select');
     } catch (error) {
@@ -267,18 +300,18 @@ const AiChatPage = () => {
     try {
       await handleMissionAction(mission.missionId, action);
       const isAccepted = action === 'ACCEPT';
+      const routineUpdate = {
+        kind: isAccepted ? 'accepted' : 'rejected',
+        missionId: mission.missionId,
+        missionType: /물|수분/.test(mission.content) ? 'water' : 'exercise',
+        routineId: selectedRoutine.id,
+        status: isAccepted ? '대체 미션 진행중' : '미완료',
+        time: selectedRoutine.time,
+        title: isAccepted ? mission.content : selectedRoutine.title,
+      };
+      saveRoutineUpdate(routineUpdate);
       navigate('/', {
-        state: {
-          routineUpdate: {
-            kind: isAccepted ? 'accepted' : 'rejected',
-            missionId: mission.missionId,
-            missionType: /물|수분/.test(mission.content) ? 'water' : 'exercise',
-            routineId: selectedRoutine.id,
-            status: isAccepted ? '대체 미션 진행중' : '미완료',
-            time: selectedRoutine.time,
-            title: isAccepted ? mission.content : selectedRoutine.title,
-          },
-        },
+        state: { routineUpdate },
       });
     } catch (error) {
       setNotice(error.message);
@@ -332,10 +365,16 @@ const AiChatPage = () => {
           <p className="mb-3 mt-8 text-[14px] font-medium text-[#8a8a8a]">상담할 루틴을 선택해주세요</p>
           <div className="ai-select-items flex flex-col gap-3">
             {routines.length === 0 && <p className="py-14 text-center text-[16px] text-[#888]">현재 등록된 루틴이 없습니다.</p>}
-            {routines.map((routine) => <RoutineOption {...routine} isSelected={selectedRoutineId === routine.id} isUnavailable={routine.status === '완료'} key={routine.id} onSelect={() => {
-              if (routine.status === '완료') { setNotice('이미 완료된 루틴입니다.'); return; }
-              setSelectedRoutineId((current) => current === routine.id ? null : routine.id);
-            }} />)}
+            {routines.map((routine) => {
+              const isUnavailable = routine.status !== '대기';
+              return <RoutineOption {...routine} isSelected={selectedRoutineId === routine.id} isUnavailable={isUnavailable} key={routine.id} onSelect={() => {
+                if (isUnavailable) {
+                  setNotice(getUnavailableRoutineMessage(routine.status));
+                  return;
+                }
+                setSelectedRoutineId((current) => current === routine.id ? null : routine.id);
+              }} />;
+            })}
           </div>
           <StepButtons isNextDisabled={!selectedRoutineId} onBack={handleBack} onNext={() => setScreen('reason')} />
         </div>

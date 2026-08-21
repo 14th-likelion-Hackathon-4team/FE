@@ -14,7 +14,8 @@ import {
   FiX,
 } from 'react-icons/fi';
 import { LuCoffee, LuCookie, LuDumbbell, LuFootprints, LuUtensils } from 'react-icons/lu';
-import { completeAlternativeMission, completeRoutine, getMainPage, getMyProfile, getTodayNotifications, readNotification } from '@/api/mainApi';
+import { completeAlternativeMission, completeRoutine, getMainPage, getMyProfile, getRoutines, getTodayNotifications, readNotification } from '@/api/mainApi';
+import { readRoutineUpdate, saveRoutineUpdate } from '@/utils/routineUpdateStorage';
 
 const parseScheduledTime = (scheduledTime) => {
   if (!scheduledTime) return { hour: 0, minute: 0, isValid: false };
@@ -43,6 +44,29 @@ const formatScheduledTime = (scheduledTime) => {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 };
 
+const toLocalDateString = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const filterActiveDateRoutines = (todayRoutines, routineDefinitions) => {
+  if (!Array.isArray(routineDefinitions)) return todayRoutines;
+
+  const today = toLocalDateString();
+  const definitionsById = new Map(routineDefinitions.map((routine) => [String(routine.id), routine]));
+
+  return todayRoutines.filter((routine) => {
+    const definition = definitionsById.get(String(routine.routineId));
+    if (!definition) return true;
+    if (definition.active === false) return false;
+    if (definition.startDate && definition.startDate > today) return false;
+    if (definition.endDate && definition.endDate < today) return false;
+    return true;
+  });
+};
+
 const getRoutineVisual = (routineName = '') => {
   const normalizedName = routineName.trim();
 
@@ -60,17 +84,39 @@ const getRoutineVisual = (routineName = '') => {
   return { tone: 'green', icon: FiSmile };
 };
 
+const parseCompleted = (value) => value === true || value === 1 || value === 'true' || value === '1';
+
+const getRoutineStatus = (routine, completed) => {
+  const routineStatus = routine.routineStatus?.toUpperCase();
+  const missionStatus = routine.alternativeMissionStatus?.toUpperCase();
+
+  if (routineStatus === 'ALTERNATIVE_COMPLETED' || missionStatus === 'COMPLETED') return '대체 미션 완료';
+  if (routineStatus === 'ALTERNATIVE_IN_PROGRESS' || routineStatus === 'ALTERNATIVE_ACCEPTED' || missionStatus === 'ACCEPTED') return '대체 미션 진행중';
+  if (routineStatus === 'MISSED' || routineStatus === 'FAILED' || routineStatus === 'ALTERNATIVE_REJECTED' || missionStatus === 'REJECTED') return '미완료';
+  if (completed || routineStatus === 'COMPLETED') return '완료';
+  return '대기';
+};
+
 const normalizeRoutine = (routine) => {
   const { hour, minute } = parseScheduledTime(routine.scheduledTime);
+  const completed = parseCompleted(routine.completed);
+  const status = getRoutineStatus(routine, completed);
+  const hasAlternativeMission = Boolean(routine.alternativeMissionId || routine.alternativeMissionStatus || routine.routineStatus?.startsWith('ALTERNATIVE_'));
+  const title = hasAlternativeMission && routine.alternativeMissionTitle
+    ? routine.alternativeMissionTitle
+    : routine.routineName;
 
   return {
     id: routine.routineId,
-    title: routine.routineName,
+    title,
     time: formatScheduledTime(routine.scheduledTime),
     scheduledMinutes: hour * 60 + minute,
-    status: routine.completed ? '완료' : '대기',
-    completed: Boolean(routine.completed),
-    ...getRoutineVisual(routine.routineName),
+    status,
+    completed,
+    missionId: routine.alternativeMissionId,
+    hasServerAlternativeState: hasAlternativeMission,
+    isMissed: routine.routineStatus === 'MISSED',
+    ...getRoutineVisual(title),
   };
 };
 const toneStyles = {
@@ -81,6 +127,27 @@ const toneStyles = {
 };
 
 const isCompletedStatus = (status) => status === '완료' || status === '대체 미션 완료';
+
+const getRoutineDisplayTitle = (title = '') => {
+  const duration = title.match(/\d+\s*(?:초|분|시간)/)?.[0]?.replace(/\s+/g, '');
+
+  if (/물|수분/.test(title)) {
+    const amounts = [...title.matchAll(/((?:\d+(?:\.\d+)?|한|두|세)\s*(?:ml|mL|ML|L|리터|컵|잔|병|모금))/g)];
+    const amount = amounts.at(-1)?.[1]?.replace(/\s+/g, ' ');
+    return amount ? `물 ${amount} 마시기` : '물 마시기';
+  }
+
+  if (/스트레칭/.test(title)) {
+    const bodyPart = title.match(/(?:목과 어깨|목·어깨|옆구리|어깨|허리|전신|하체|상체|다리|목|팔)/)?.[0];
+    return [bodyPart, '스트레칭', duration].filter(Boolean).join(' ');
+  }
+
+  if (/호흡/.test(title)) return ['깊은 호흡', duration].filter(Boolean).join(' ');
+  if (/산책|걷기/.test(title)) return ['가볍게 걷기', duration].filter(Boolean).join(' ');
+  if (/운동/.test(title) && duration) return `가벼운 운동 ${duration}`;
+
+  return title.length > 18 ? `${title.slice(0, 17).trim()}…` : title;
+};
 
 const RoutineItem = ({ icon: Icon, id, isCompletingAlternative, isExpanded, isHighlighted, isMissed = false, onCannotComplete, onCompleteAlternative, onToggle, status, time, title, tone }) => {
   const styles = toneStyles[tone];
@@ -110,7 +177,7 @@ const RoutineItem = ({ icon: Icon, id, isCompletingAlternative, isExpanded, isHi
               <p className="text-[16px] font-semibold tracking-[-0.03em] text-[#777268]">선택한 루틴이에요!</p>
               <span className={`justify-self-end shrink-0 rounded-full py-2 text-[14px] font-semibold leading-none ${statusPadding} ${statusStyle}`}>{displayedStatus}</span>
             </div>
-            <h3 className="break-keep text-[32px] font-extrabold leading-[1.2] tracking-[-0.05em] text-[#181818] [overflow-wrap:anywhere]">{title}</h3>
+            <h3 className="break-keep text-[32px] font-extrabold leading-[1.2] tracking-[-0.05em] text-[#181818] [overflow-wrap:anywhere]" title={title}>{getRoutineDisplayTitle(title)}</h3>
             <p className="mt-1 text-[16px] font-semibold text-[#929292]">{time}</p>
           </div>
         </button>
@@ -184,7 +251,7 @@ const NotificationPanel = ({ errorMessage, isLoading, notifications, onClose, on
 const MainPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [routineUpdate, setRoutineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? null);
+  const [routineUpdate, setRoutineUpdate] = useState(() => location.state?.routineUpdate ?? location.state?.alternativeMission ?? readRoutineUpdate());
   const [mainData, setMainData] = useState({ userName: '', todayRoutines: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -201,7 +268,7 @@ const MainPage = () => {
 
   const apiRoutines = mainData.todayRoutines.map(normalizeRoutine).sort((a, b) => a.scheduledMinutes - b.scheduledMinutes);
   const displayedRoutines = apiRoutines.map((routine) => {
-    if (routine.id !== routineUpdate?.routineId) return routine;
+    if (routine.hasServerAlternativeState || routine.id !== routineUpdate?.routineId) return routine;
     if (routineUpdate.kind === 'rejected') return { ...routine, status: routineUpdate.status };
 
     return {
@@ -236,9 +303,8 @@ const MainPage = () => {
     : false;
   const isRoutineCompleted = Boolean(currentRoutine?.completed || isCompletedStatus(currentRoutine?.status));
   const isCurrentAlternativeMission = Boolean(
-    routineUpdate?.kind === 'accepted'
-      && routineUpdate?.missionId
-      && currentRoutine?.id === routineUpdate.routineId,
+    currentRoutine?.status === '대체 미션 진행중'
+      && (currentRoutine?.missionId || routineUpdate?.missionId),
   );
   const hasTodayRoutines = displayedRoutines.length > 0;
   const hasUnreadNotifications = notifications.some(({ read }) => !read);
@@ -263,8 +329,12 @@ const MainPage = () => {
           if (userId) localStorage.setItem('userId', String(userId));
         }
         if (!userId) throw new Error('사용자 정보를 확인할 수 없습니다.');
-        const data = await getMainPage(userId);
-        if (isActive) setMainData({ userName: data?.userName ?? '', todayRoutines: data?.todayRoutines ?? [] });
+        const [data, routineDefinitions] = await Promise.all([
+          getMainPage(userId),
+          getRoutines().catch(() => null),
+        ]);
+        const todayRoutines = filterActiveDateRoutines(data?.todayRoutines ?? [], routineDefinitions);
+        if (isActive) setMainData({ userName: data?.userName ?? '', todayRoutines });
       } catch (error) {
         if (isActive) setErrorMessage(error.message);
       } finally {
@@ -333,13 +403,32 @@ const MainPage = () => {
     navigate('/aichat');
   };
 
-  const handleCompleteAlternative = async () => {
-    if (!routineUpdate?.missionId || isCompletingAlternative) return;
+  const handleCompleteAlternative = async (targetRoutine = currentRoutine) => {
+    const missionId = targetRoutine?.missionId ?? routineUpdate?.missionId;
+    const routineId = targetRoutine?.id ?? routineUpdate?.routineId;
+    if (!missionId || !routineId || isCompletingAlternative) return;
     setIsCompletingAlternative(true);
     setErrorMessage('');
     try {
-      await completeAlternativeMission(routineUpdate.missionId);
-      setRoutineUpdate((current) => ({ ...current, status: '대체 미션 완료' }));
+      await completeAlternativeMission(missionId);
+      setMainData((current) => ({
+        ...current,
+        todayRoutines: current.todayRoutines.map((routine) => (
+          routine.routineId === routineId
+            ? {
+              ...routine,
+              routineStatus: 'ALTERNATIVE_COMPLETED',
+              alternativeMissionStatus: 'COMPLETED',
+              alternativeMissionCompleted: true,
+            }
+            : routine
+        )),
+      }));
+      setRoutineUpdate((current) => {
+        const updated = { ...current, missionId, routineId, status: '대체 미션 완료' };
+        saveRoutineUpdate(updated);
+        return updated;
+      });
     } catch (error) {
       setErrorMessage(error.message);
     } finally {
@@ -350,7 +439,7 @@ const MainPage = () => {
   const handleCompleteRoutine = async () => {
     if (!currentRoutine || isCompleting || isCompletingAlternative) return;
     if (isCurrentAlternativeMission) {
-      await handleCompleteAlternative();
+      await handleCompleteAlternative(currentRoutine);
       return;
     }
     setIsCompleting(true);
@@ -462,17 +551,17 @@ const MainPage = () => {
           <>
 
         <article className={`mt-5 rounded-[24px] border-2 bg-[#fffdf2] px-5 shadow-[0_5px_10px_rgba(170,136,36,0.08)] ${highlightedRoutineId === currentRoutine.id ? 'border-[#e78d84]' : 'border-[#f2d984]'} ${isRoutineCompleted ? 'py-6' : 'pb-7 pt-9'}`} data-routine-id={currentRoutine.id} onClick={() => setHighlightedRoutineId(null)}>
-          <div className="grid grid-cols-[48px_minmax(0,1fr)_76px] items-center gap-3">
+          <div className="grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3">
             <div className="relative flex size-12 shrink-0 items-center justify-center rounded-full bg-[#fff1b9] text-[#8877ef]">
               <CurrentRoutineIcon className="size-8" strokeWidth={3} />
               <span className="absolute right-0 top-0 size-2.5 rounded-full bg-[#f0bf64]" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[16px] font-semibold tracking-[-0.03em] text-[#777268]">{isCurrentRoutineTime ? '지금 수행할 시간이에요!' : '다음 루틴이에요!'}</p>
-              <h3 className="text-[32px] font-extrabold leading-tight tracking-[-0.05em] text-[#181818]">{currentRoutine.title}</h3>
+              <h3 className="text-[32px] font-extrabold leading-tight tracking-[-0.05em] text-[#181818] [word-break:keep-all]" title={currentRoutine.title}>{getRoutineDisplayTitle(currentRoutine.title)}</h3>
               <p className="text-[16px] font-semibold text-[#929292]">{currentRoutine.time}</p>
             </div>
-            <span className={`min-w-[76px] max-w-[116px] justify-self-end rounded-full px-3 py-2 text-center text-[14px] font-semibold ${isRoutineCompleted ? 'bg-[#d9f2d5] text-[#64a56e]' : 'bg-[#eeeef0] text-[#838383]'}`}>{currentRoutine.status.startsWith('대체 미션') ? currentRoutine.status : isRoutineCompleted ? '완료' : isCurrentRoutineTime ? '진행중' : '대기'}</span>
+            <span className={`min-w-[76px] justify-self-end whitespace-nowrap rounded-full px-3 py-2 text-center font-semibold ${currentRoutine.status === '대체 미션 진행중' ? 'text-[12px]' : 'text-[14px]'} ${currentRoutine.status === '대체 미션 완료' ? 'bg-[#dceaff] text-[#6994cc]' : isRoutineCompleted ? 'bg-[#d9f2d5] text-[#64a56e]' : 'bg-[#eeeef0] text-[#838383]'}`}>{currentRoutine.status.startsWith('대체 미션') ? currentRoutine.status : isRoutineCompleted ? '완료' : isCurrentRoutineTime ? '진행중' : '대기'}</span>
           </div>
           {!isRoutineCompleted && (
             (isCurrentRoutineTime || isCurrentAlternativeMission) ? (
@@ -496,10 +585,11 @@ const MainPage = () => {
               {...routine}
               isExpanded={expandedRoutineId === routine.id}
               isHighlighted={highlightedRoutineId === routine.id}
+              isMissed={routine.isMissed}
               isCompletingAlternative={isCompletingAlternative}
               key={routine.id}
               onCannotComplete={handleOpenAiChat}
-              onCompleteAlternative={handleCompleteAlternative}
+              onCompleteAlternative={() => handleCompleteAlternative(routine)}
               onToggle={() => {
                 if (highlightedRoutineId === routine.id) {
                   setHighlightedRoutineId(null);
