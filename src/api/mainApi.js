@@ -26,6 +26,8 @@ export const getMainPage = (userId) => authenticatedRequest(
   `/api/v1/routinefit/main?userId=${encodeURIComponent(userId)}`,
 );
 
+export const getRoutines = () => authenticatedRequest('/api/v1/routinefit/routines');
+
 export const completeRoutine = (routineId) => authenticatedRequest(
   `/api/v1/routinefit/routines/${routineId}/complete`,
   { method: 'PATCH' },
